@@ -209,6 +209,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* ── Highlight ── */
 .hl { background: #fff3cd; border-radius: 3px; padding: 0 2px; font-weight: 600; }
 .new-badge { display: inline-block; background: #e41e3f; color: white; border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 6px; }
+
+/* ── Join prompt ── */
+.join-prompt {
+  background: #fff8e1; border: 1.5px solid #ffc107; border-radius: 14px;
+  padding: 12px 16px; margin-bottom: 10px;
+  display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+  animation: fadeUp .2s ease;
+}
+.join-prompt-icon { font-size: 22px; flex-shrink: 0; }
+.join-prompt-body { flex: 1; min-width: 0; }
+.join-prompt-title { font-size: 14px; font-weight: 600; color: #7a4f00; margin-bottom: 6px; }
+.join-prompt-sub { font-size: 12px; color: #9a6700; margin-bottom: 10px; }
+.join-prompt-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-join { padding: 7px 16px; border-radius: 20px; border: none; background: #1877f2; color: white; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-join:hover { background: #1464d8; }
+.btn-join:disabled { opacity: .55; cursor: not-allowed; }
+.btn-join-fb { padding: 7px 16px; border-radius: 20px; border: 1.5px solid #1877f2; background: white; color: #1877f2; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn-join-fb:hover { background: #e7f3ff; }
+.join-prompt-close { cursor: pointer; font-size: 18px; color: #999; line-height: 1; flex-shrink: 0; }
+.join-prompt-close:hover { color: #555; }
+.join-msg { font-size: 13px; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -254,6 +275,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <button class="btn-add btn-add-blue" onclick="addGroup()" title="Thêm nhóm">+</button>
     </div>
   </div>
+
+  <!-- Join prompt (shown dynamically) -->
+  <div id="joinPromptWrap"></div>
 
   <!-- Keyword bar -->
   <div class="panel">
@@ -681,20 +705,82 @@ async function addGroup() {
     const d = await r.json();
     if (d.ok) {
       if (d.name) groupNames[d.id] = d.name;
-      // Save to server
-      await fetch('/api/groups', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ id: d.id, name: d.name || '' })
-      });
-      if (!groups.includes(d.id)) groups.push(d.id);
-      renderGroupChips();
-      st.textContent = `✅ Đã thêm: ${d.name||d.id}`;
+      if (!d.is_member) {
+        st.textContent = prev;
+        showJoinPrompt(d.id, d.name || d.id);
+      } else {
+        await fetch('/api/groups', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ id: d.id, name: d.name || '' })
+        });
+        if (!groups.includes(d.id)) groups.push(d.id);
+        renderGroupChips();
+        st.textContent = `✅ Đã thêm: ${d.name||d.id}`;
+        setTimeout(()=>{ st.textContent=prev; },3000);
+      }
     } else {
       st.textContent = `❌ Không tìm được: ${d.error}`;
+      setTimeout(()=>{ st.textContent=prev; },4000);
     }
-  } catch { st.textContent='❌ Lỗi kết nối'; }
-  setTimeout(()=>{ st.textContent=prev; },4000);
+  } catch {
+    st.textContent='❌ Lỗi kết nối';
+    setTimeout(()=>{ st.textContent=prev; },4000);
+  }
   inp.disabled=false;
+}
+
+function showJoinPrompt(gid, gname) {
+  document.getElementById('joinPromptWrap').innerHTML = `
+    <div class="join-prompt" id="joinPrompt-${gid}">
+      <div class="join-prompt-icon">⚠️</div>
+      <div class="join-prompt-body">
+        <div class="join-prompt-title">Bạn chưa là thành viên của nhóm "${gname}"</div>
+        <div class="join-prompt-sub">Cần tham gia nhóm trước thì mới theo dõi được bài viết.</div>
+        <div class="join-prompt-actions">
+          <button class="btn-join" id="btnJoin-${gid}" onclick="joinGroup('${gid}','${esc(gname)}')">🚀 Gửi yêu cầu tham gia</button>
+          <a class="btn-join-fb" href="https://www.facebook.com/groups/${gid}" target="_blank">🔗 Mở trên Facebook</a>
+        </div>
+        <div class="join-msg" id="joinMsg-${gid}"></div>
+      </div>
+      <span class="join-prompt-close" onclick="document.getElementById('joinPromptWrap').innerHTML=''">✕</span>
+    </div>`;
+}
+
+async function joinGroup(gid, gname) {
+  const btn = document.getElementById('btnJoin-' + gid);
+  const msg = document.getElementById('joinMsg-' + gid);
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang gửi...';
+  try {
+    const r = await fetch(`/api/groups/${gid}/join`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      if (d.already_member) {
+        // Was actually already a member — add the group
+        await fetch('/api/groups', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ id: gid, name: gname })
+        });
+        if (!groups.includes(gid)) groups.push(gid);
+        renderGroupChips();
+        document.getElementById('joinPromptWrap').innerHTML = '';
+      } else {
+        msg.style.color = '#1a7f37';
+        msg.textContent = '✅ ' + d.msg + ' — Chờ admin duyệt rồi thêm lại nhóm.';
+        btn.textContent = '✔ Đã gửi';
+      }
+    } else {
+      msg.style.color = '#e41e3f';
+      msg.textContent = '❌ ' + (d.error || 'Lỗi không xác định');
+      btn.disabled = false;
+      btn.textContent = '🚀 Gửi yêu cầu tham gia';
+    }
+  } catch {
+    msg.style.color = '#e41e3f';
+    msg.textContent = '❌ Lỗi kết nối';
+    btn.disabled = false;
+    btn.textContent = '🚀 Gửi yêu cầu tham gia';
+  }
 }
 
 async function removeGroup(gid) {

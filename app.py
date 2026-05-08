@@ -227,11 +227,22 @@ def api_resolve_group():
     if not slug:
         return jsonify({'ok': False, 'error': 'Thiếu slug'}), 400
     try:
-        data = get_api(DEFAULT_GROUP).resolve_slug(slug)
+        api = get_api(DEFAULT_GROUP)
+        data = api.resolve_slug(slug)
         if data and 'id' in data:
-            return jsonify({'ok': True, 'id': data['id'], 'name': data.get('name', slug)})
+            is_member = api.check_membership(data['id'])
+            return jsonify({'ok': True, 'id': data['id'], 'name': data.get('name', slug), 'is_member': is_member})
         err = (data or {}).get('error', {}).get('message', 'Không tìm thấy group')
         return jsonify({'ok': False, 'error': err})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/groups/<gid>/join', methods=['POST'])
+def api_join_group(gid):
+    try:
+        result = get_api(DEFAULT_GROUP).join_group(gid)
+        return jsonify(result)
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 

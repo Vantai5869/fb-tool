@@ -88,12 +88,55 @@ class FacebookGroupAPI:
         return resp.json()
 
     def resolve_slug(self, slug: str) -> Optional[dict]:
-        # Thử Graph API trước
         data = self._call('get', f'{GRAPH_URL}/{slug}', params={'fields': 'id,name'})
         if data and 'id' in data:
             return data
-        # Fallback: scrape trang group lấy numeric ID qua cookie
         return _scrape_group_id(slug)
+
+    def check_membership(self, group_id: str) -> bool:
+        data = self._call('get', f'{GRAPH_URL}/{group_id}/feed', params={'fields': 'id', 'limit': 1})
+        return data is not None and 'error' not in data
+
+    def join_group(self, group_id: str) -> dict:
+        import re
+        cookie = load_cookie()
+        if not cookie:
+            return {'ok': False, 'error': 'Không có cookie'}
+        try:
+            sess = requests.Session()
+            r = sess.get(
+                f'https://mbasic.facebook.com/groups/{group_id}',
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+                    'Accept': 'text/html',
+                    'Cookie': cookie,
+                },
+                timeout=15,
+            )
+            html = r.text
+            if re.search(r'leave_group|rời nhóm|Rời Nhóm', html, re.I):
+                return {'ok': True, 'already_member': True, 'msg': 'Đã là thành viên'}
+            m = re.search(r'action="(/groups/[^"]*join[^"]*)"', html, re.I) or \
+                re.search(r'action="(/a/group/join[^"]*)"', html, re.I)
+            if not m:
+                return {'ok': False, 'error': 'Nhóm riêng tư hoặc không tìm được nút tham gia'}
+            form_url = 'https://mbasic.facebook.com' + m.group(1).replace('&amp;', '&')
+            inputs = {k: v for k, v in re.findall(r'<input[^>]+name="([^"]+)"[^>]+value="([^"]*)"', html)}
+            r2 = sess.post(
+                form_url, data=inputs,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+                    'Cookie': cookie,
+                    'Referer': f'https://mbasic.facebook.com/groups/{group_id}',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                timeout=15,
+            )
+            if r2.status_code < 400:
+                return {'ok': True, 'msg': 'Đã gửi yêu cầu tham gia nhóm'}
+            return {'ok': False, 'error': f'Lỗi HTTP {r2.status_code}'}
+        except Exception as e:
+            return {'ok': False, 'error': str(e)}
 
 
 def _scrape_group_id(slug: str) -> Optional[dict]:
