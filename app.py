@@ -11,6 +11,8 @@ DATA_DIR = os.path.join(BASE_DIR, 'data')
 
 SEEN_FILE = os.path.join(DATA_DIR, 'seen_posts.json')
 TG_CONFIG_FILE = os.path.join(DATA_DIR, 'telegram_config.json')
+GROUPS_FILE = os.path.join(DATA_DIR, 'groups.json')
+SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
 
 BOT_TOKEN = os.environ.get('TG_BOT_TOKEN', '8724375632:AAEgyz4yRPivDYWGXesTaJHhdqWYIraSoT8')
 DEFAULT_GROUP = os.environ.get('DEFAULT_GROUP', '3809441172650624')
@@ -22,10 +24,13 @@ app = Flask(__name__, template_folder='views')
 _api_cache: dict = {}
 _seen_ids: set = set()
 _tg_chat_ids: list = []
+_pages_cache: dict = {}  # {page_id: {name, access_token}}
+_groups: list = []       # [{id, name}]
+_settings: dict = {}    # {auto_refresh, interval}
 
 
 def _load_state():
-    global _seen_ids, _tg_chat_ids
+    global _seen_ids, _tg_chat_ids, _groups, _settings
     os.makedirs(DATA_DIR, exist_ok=True)
     try:
         _seen_ids = set(json.load(open(SEEN_FILE)))
@@ -36,6 +41,14 @@ def _load_state():
         _tg_chat_ids = cfg.get('chat_ids') or ([cfg['chat_id']] if cfg.get('chat_id') else ['7129448686'])
     except Exception:
         _tg_chat_ids = ['7129448686']
+    try:
+        _groups = json.load(open(GROUPS_FILE))
+    except Exception:
+        _groups = [{'id': DEFAULT_GROUP, 'name': ''}]
+    try:
+        _settings = json.load(open(SETTINGS_FILE))
+    except Exception:
+        _settings = {'auto_refresh': True, 'interval': 5}
 
 
 def _save_seen():
@@ -46,6 +59,16 @@ def _save_seen():
 def _save_tg():
     with open(TG_CONFIG_FILE, 'w') as f:
         json.dump({'chat_ids': _tg_chat_ids}, f)
+
+
+def _save_groups():
+    with open(GROUPS_FILE, 'w') as f:
+        json.dump(_groups, f, ensure_ascii=False)
+
+
+def _save_settings():
+    with open(SETTINGS_FILE, 'w') as f:
+        json.dump(_settings, f)
 
 
 def get_api(group_id: str) -> FacebookGroupAPI:
@@ -148,16 +171,48 @@ def api_posts():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/post', methods=['POST'])
+def api_create_post():
+    body = request.get_json() or {}
+    group_id = body.get('group_id', '').strip()
+    message = body.get('message', '').strip()
+    page_id = body.get('page_id', '').strip()
+    if not group_id or not message:
+        return jsonify({'ok': False, 'error': 'Thiếu group_id hoặc message'}), 400
+    try:
+        page_token = _pages_cache.get(page_id, {}).get('access_token') if page_id else None
+        result = get_api(group_id).create_post(message, page_token)
+        if result and 'id' in result:
+            return jsonify({'ok': True, 'post_id': result['id']})
+        err = (result or {}).get('error', {}).get('message', 'Lỗi không xác định')
+        return jsonify({'ok': False, 'error': err})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/pages')
+def api_pages():
+    global _pages_cache
+    try:
+        pages = get_api(DEFAULT_GROUP).get_pages() or []
+        _pages_cache = {p['id']: {'name': p['name'], 'access_token': p['access_token']} for p in pages}
+        return jsonify([{'id': p['id'], 'name': p['name']} for p in pages])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/comment', methods=['POST'])
 def api_comment():
     body = request.get_json() or {}
     post_id = body.get('post_id', '').strip()
     message = body.get('message', '').strip()
     group_id = body.get('group_id', DEFAULT_GROUP)
+    page_id = body.get('page_id', '').strip()
     if not post_id or not message:
         return jsonify({'ok': False, 'error': 'Thiếu post_id hoặc message'}), 400
     try:
-        result = get_api(group_id).post_comment(post_id, message)
+        page_token = _pages_cache.get(page_id, {}).get('access_token') if page_id else None
+        result = get_api(group_id).post_comment(post_id, message, page_token)
         if result and 'id' in result:
             return jsonify({'ok': True, 'comment_id': result['id']})
         err = (result or {}).get('error', {}).get('message', 'Lỗi không xác định')
@@ -171,12 +226,10 @@ def api_resolve_group():
     slug = request.args.get('slug', '').strip()
     if not slug:
         return jsonify({'ok': False, 'error': 'Thiếu slug'}), 400
-    if slug.isdigit():
-        return jsonify({'ok': True, 'id': slug})
     try:
         data = get_api(DEFAULT_GROUP).resolve_slug(slug)
         if data and 'id' in data:
-            return jsonify({'ok': True, 'id': data['id'], 'name': data.get('name', '')})
+            return jsonify({'ok': True, 'id': data['id'], 'name': data.get('name', slug)})
         err = (data or {}).get('error', {}).get('message', 'Không tìm thấy group')
         return jsonify({'ok': False, 'error': err})
     except Exception as e:
@@ -205,6 +258,52 @@ def tg_remove(chat_id):
         _tg_chat_ids.remove(chat_id)
         _save_tg()
     return jsonify({'ok': True, 'chat_ids': _tg_chat_ids})
+
+
+@app.route('/api/groups', methods=['GET'])
+def groups_get():
+    return jsonify(_groups)
+
+
+@app.route('/api/groups', methods=['POST'])
+def groups_add():
+    global _groups
+    body = request.get_json() or {}
+    gid = body.get('id', '').strip()
+    name = body.get('name', '').strip()
+    if not gid:
+        return jsonify({'ok': False, 'error': 'Thiếu id'}), 400
+    if not any(g['id'] == gid for g in _groups):
+        _groups.append({'id': gid, 'name': name})
+        _save_groups()
+    else:
+        for g in _groups:
+            if g['id'] == gid and name:
+                g['name'] = name
+        _save_groups()
+    return jsonify({'ok': True, 'groups': _groups})
+
+
+@app.route('/api/groups/<gid>', methods=['DELETE'])
+def groups_remove(gid):
+    global _groups
+    _groups = [g for g in _groups if g['id'] != gid]
+    _save_groups()
+    return jsonify({'ok': True, 'groups': _groups})
+
+
+@app.route('/api/settings', methods=['GET'])
+def settings_get():
+    return jsonify(_settings)
+
+
+@app.route('/api/settings', methods=['POST'])
+def settings_save():
+    global _settings
+    body = request.get_json() or {}
+    _settings.update({k: v for k, v in body.items() if k in ('auto_refresh', 'interval')})
+    _save_settings()
+    return jsonify({'ok': True, 'settings': _settings})
 
 
 @app.route('/api/telegram/test/<chat_id>', methods=['POST'])

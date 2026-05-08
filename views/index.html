@@ -3,685 +3,802 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Facebook Group Posts</title>
+<title>FB Group Monitor</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; color: #1c1e21; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; color: #1c1e21; min-height: 100vh; }
 
-  .header {
-    background: #1877f2; color: white; padding: 14px 24px;
-    display: flex; align-items: center; gap: 12px;
-    position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2);
-  }
-  .header h1 { font-size: 20px; font-weight: 700; }
-  .header .subtitle { font-size: 13px; opacity: .8; }
+/* ── Header ── */
+.header {
+  background: linear-gradient(135deg, #1877f2 0%, #0d5cc7 100%);
+  color: white; padding: 0 24px;
+  height: 56px; display: flex; align-items: center; gap: 14px;
+  position: sticky; top: 0; z-index: 200;
+  box-shadow: 0 2px 12px rgba(24,119,242,.35);
+}
+.header-icon { font-size: 26px; line-height: 1; }
+.header-title { font-size: 18px; font-weight: 700; letter-spacing: -.2px; }
+.header-sub { font-size: 12px; opacity: .75; margin-top: 1px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-spacer { flex: 1; }
+.header-status { font-size: 12px; opacity: .8; white-space: nowrap; }
 
-  .toolbar {
-    max-width: 680px; margin: 16px auto 0; padding: 0 16px;
-    display: flex; gap: 10px; align-items: center;
-  }
-  .toolbar select, .toolbar button { padding: 8px 16px; border-radius: 8px; border: none; font-size: 14px; cursor: pointer; }
-  .toolbar select { background: white; border: 1px solid #ddd; }
-  .btn-refresh { background: #1877f2; color: white; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-  .btn-refresh:hover { background: #166fe5; }
-  .status-text { font-size: 13px; color: #65676b; margin-left: auto; }
+/* ── Main layout ── */
+.main { max-width: 700px; margin: 0 auto; padding: 16px 12px 40px; }
 
-  .auto-refresh-wrap { display: flex; align-items: center; gap: 6px; }
-  .btn-auto {
-    padding: 8px 14px; border-radius: 8px; border: 2px solid #1877f2;
-    background: white; color: #1877f2; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s;
-  }
-  .btn-auto.active { background: #1877f2; color: white; }
-  .btn-auto:hover { opacity: .85; }
-  #intervalInput { width: 52px; padding: 7px 8px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; text-align: center; }
-  .unit { font-size: 13px; color: #65676b; }
+/* ── Panel (group/kw/tg bars) ── */
+.panel {
+  background: white; border-radius: 14px; padding: 12px 16px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.08); margin-bottom: 10px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+}
+.panel-label { font-size: 12px; font-weight: 700; color: #65676b; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; min-width: 70px; }
 
-  .group-bar, .tg-bar {
-    max-width: 680px; margin: 10px auto 0; padding: 10px 16px;
-    background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.1);
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  }
-  .group-bar-label, .tg-bar-label { font-size: 13px; font-weight: 600; color: #444; white-space: nowrap; }
-  .group-tags, .tg-tags { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+/* ── Chips ── */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
 
-  .group-tag {
-    display: flex; align-items: center; gap: 5px;
-    background: #e7f3ff; color: #1877f2;
-    border-radius: 20px; padding: 4px 10px; font-size: 13px; font-weight: 500;
-  }
-  .group-tag .remove { cursor: pointer; font-size: 14px; color: #1877f2; opacity: .6; line-height: 1; }
-  .group-tag .remove:hover { opacity: 1; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: 20px; padding: 4px 10px; font-size: 13px; font-weight: 500;
+  cursor: default; max-width: 200px;
+}
+.chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-remove { cursor: pointer; opacity: .55; font-size: 13px; line-height: 1; flex-shrink: 0; }
+.chip-remove:hover { opacity: 1; }
 
-  .tg-tag {
-    display: flex; align-items: center; gap: 5px;
-    background: #e8f5fd; color: #229ed9;
-    border-radius: 20px; padding: 4px 10px; font-size: 13px; font-weight: 500;
-  }
-  .tg-tag .remove { cursor: pointer; font-size: 13px; opacity: .6; line-height: 1; }
-  .tg-tag .remove:hover { opacity: 1; }
-  .tg-tag .test-btn {
-    cursor: pointer; font-size: 11px; background: #229ed9; color: white;
-    border-radius: 8px; padding: 1px 6px; margin-left: 2px;
-  }
-  .tg-tag .test-btn:hover { background: #1a8bbf; }
+.chip-group { background: #e7f3ff; color: #1877f2; }
+.chip-kw    { background: #fff0e6; color: #d4700a; }
+.chip-tg    { background: #e8f5fd; color: #1a7fc1; }
 
-  .group-input-wrap, .tg-input-wrap { display: flex; gap: 6px; align-items: center; }
-  .group-input-wrap input { padding: 6px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; width: 160px; }
-  .tg-input-wrap input { padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; width: 140px; }
-  .group-input-wrap button { padding: 6px 12px; border-radius: 8px; border: none; background: #1877f2; color: white; font-size: 16px; cursor: pointer; font-weight: 700; }
-  .group-input-wrap button:hover { background: #166fe5; }
-  .btn-tg-add { padding: 6px 12px; border-radius: 8px; border: none; background: #229ed9; color: white; font-size: 16px; font-weight: 700; cursor: pointer; }
-  .btn-tg-add:hover { background: #1a8bbf; }
+.chip-action { display: inline-flex; align-items: center; cursor: pointer; font-size: 11px; background: rgba(0,0,0,.08); border-radius: 8px; padding: 1px 7px; margin-left: 2px; }
+.chip-action:hover { background: rgba(0,0,0,.16); }
 
-  .badge-group { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: #e7f3ff; color: #1877f2; font-weight: 600; }
-  .tg-hint { font-size: 11px; color: #888; width: 100%; padding-top: 2px; }
-  .tg-status { font-size: 12px; color: #65676b; }
-  .tg-noti-badge { display: inline-block; background: #229ed9; color: white; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+/* ── Input row ── */
+.input-row { display: flex; gap: 6px; align-items: center; }
+.input-row input {
+  padding: 6px 11px; border-radius: 20px; border: 1.5px solid #e4e6eb;
+  font-size: 13px; width: 160px; outline: none; transition: border .15s;
+}
+.input-row input:focus { border-color: #1877f2; }
+.btn-add {
+  width: 28px; height: 28px; border-radius: 50%; border: none;
+  font-size: 18px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.btn-add:hover { opacity: .85; }
+.btn-add-blue { background: #1877f2; color: white; }
+.btn-add-orange { background: #d4700a; color: white; }
+.btn-add-tg { background: #1a7fc1; color: white; }
 
-  .kw-bar {
-    max-width: 680px; margin: 10px auto 0; padding: 10px 16px;
-    background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.1);
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  }
-  .kw-bar-label { font-size: 13px; font-weight: 600; color: #444; white-space: nowrap; }
-  .kw-tags { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
-  .kw-tag {
-    display: flex; align-items: center; gap: 5px;
-    background: #fff0e6; color: #e67e22;
-    border-radius: 20px; padding: 4px 10px; font-size: 13px; font-weight: 500;
-  }
-  .kw-tag .remove { cursor: pointer; font-size: 13px; opacity: .6; line-height: 1; }
-  .kw-tag .remove:hover { opacity: 1; }
-  .kw-input-wrap { display: flex; gap: 6px; align-items: center; }
-  .kw-input-wrap input { padding: 6px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; width: 150px; }
-  .btn-kw-add { padding: 6px 12px; border-radius: 8px; border: none; background: #e67e22; color: white; font-size: 16px; font-weight: 700; cursor: pointer; }
-  .btn-kw-add:hover { background: #cf6d17; }
-  .kw-hint { font-size: 11px; color: #888; }
-  .kw-highlight { background: #fff3cd; border-radius: 3px; padding: 0 2px; font-weight: 600; }
+.panel-hint { font-size: 11px; color: #999; width: 100%; }
 
-  .comment-input-section { padding: 8px 16px 12px; border-top: 1px solid #f0f2f5; }
-  .comment-input-toggle { font-size: 13px; color: #1877f2; cursor: pointer; font-weight: 600; display: inline-block; }
-  .comment-input-toggle:hover { text-decoration: underline; }
-  .comment-input-wrap { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
-  .comment-textarea {
-    width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid #ddd;
-    font-size: 14px; font-family: inherit; resize: vertical; min-height: 60px; outline: none;
-  }
-  .comment-textarea:focus { border-color: #1877f2; }
-  .comment-actions { display: flex; align-items: center; gap: 8px; }
-  .btn-comment-send {
-    padding: 7px 18px; border-radius: 8px; border: none;
-    background: #1877f2; color: white; font-size: 13px; font-weight: 600; cursor: pointer;
-  }
-  .btn-comment-send:hover { background: #166fe5; }
-  .btn-comment-send:disabled { opacity: .6; cursor: not-allowed; }
-  .comment-result { font-size: 12px; color: #65676b; }
+/* ── Toolbar ── */
+.toolbar {
+  background: white; border-radius: 14px; padding: 10px 16px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.08); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.toolbar select {
+  padding: 7px 12px; border-radius: 20px; border: 1.5px solid #e4e6eb;
+  font-size: 13px; cursor: pointer; background: white; outline: none;
+}
+.btn {
+  padding: 7px 16px; border-radius: 20px; border: none;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px; transition: opacity .15s;
+}
+.btn:hover { opacity: .88; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary  { background: #1877f2; color: white; }
+.btn-success  { background: #2dba4e; color: white; }
+.btn-auto     { background: white; color: #1877f2; border: 1.5px solid #1877f2; }
+.btn-auto.on  { background: #1877f2; color: white; }
+.interval-wrap { display: flex; align-items: center; gap: 4px; }
+.interval-wrap input { width: 44px; padding: 6px 6px; border-radius: 8px; border: 1.5px solid #e4e6eb; font-size: 13px; text-align: center; outline: none; }
+.interval-wrap .unit { font-size: 12px; color: #65676b; }
+.toolbar-spacer { flex: 1; }
+.toolbar-status { font-size: 12px; color: #65676b; white-space: nowrap; }
 
-  .feed { max-width: 680px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+/* ── Feed ── */
+.feed { display: flex; flex-direction: column; gap: 12px; }
 
-  .card { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.1); overflow: hidden; animation: fadeIn .3s ease; }
-  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+/* ── Card ── */
+.card { background: white; border-radius: 14px; box-shadow: 0 1px 6px rgba(0,0,0,.08); overflow: hidden; animation: fadeUp .25s ease; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 
-  .card-header { padding: 14px 16px 10px; display: flex; align-items: flex-start; gap: 10px; }
-  .avatar {
-    width: 42px; height: 42px; border-radius: 50%;
-    background: linear-gradient(135deg, #1877f2, #42b72a);
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: 700; font-size: 16px; flex-shrink: 0;
-  }
-  .author-info { flex: 1; }
-  .author-name { font-weight: 600; font-size: 15px; color: #050505; }
-  .post-meta { font-size: 12px; color: #65676b; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
-  .post-meta .dot { width: 3px; height: 3px; border-radius: 50%; background: #65676b; }
+.card-header { padding: 14px 16px 10px; display: flex; gap: 11px; }
+.avatar {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 15px;
+}
+.author-info { flex: 1; min-width: 0; }
+.author-name { font-weight: 700; font-size: 14px; color: #050505; }
 
-  .badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
-  .badge-published { background: #e7f3e8; color: #1a7f37; }
-  .badge-pending { background: #fff3cd; color: #856404; }
+.post-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+.meta-time { font-size: 12px; color: #65676b; }
+.meta-dot { width: 3px; height: 3px; border-radius: 50%; background: #bcc0c4; flex-shrink: 0; }
 
-  .card-body { padding: 0 16px 12px; }
-  .post-text { font-size: 15px; line-height: 1.5; color: #1c1e21; white-space: pre-wrap; word-break: break-word; }
-  .post-text.collapsed { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
-  .see-more { color: #1877f2; cursor: pointer; font-size: 14px; margin-top: 4px; display: inline-block; }
-  .see-more:hover { text-decoration: underline; }
+.badge { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+.badge-ok      { background: #e6f4ea; color: #1a7f37; }
+.badge-pending { background: #fff8e1; color: #b45309; }
+.badge-group   { background: #e7f3ff; color: #1877f2; max-width: 150px; overflow: hidden; text-overflow: ellipsis; cursor: default; }
 
-  .attachment { margin-top: 10px; border-radius: 8px; overflow: hidden; }
-  .attachment img { width: 100%; max-height: 400px; object-fit: cover; display: block; cursor: pointer; }
-  .attachment img:hover { opacity: .95; }
+.card-body { padding: 4px 16px 12px; }
+.post-text { font-size: 14px; line-height: 1.55; color: #1c1e21; white-space: pre-wrap; word-break: break-word; }
+.post-text.collapsed { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.see-more { color: #1877f2; cursor: pointer; font-size: 13px; margin-top: 4px; display: inline-block; }
+.see-more:hover { text-decoration: underline; }
 
-  .engagement { padding: 8px 16px; border-top: 1px solid #f0f2f5; border-bottom: 1px solid #f0f2f5; display: flex; gap: 20px; font-size: 14px; color: #65676b; }
-  .eng-item { display: flex; align-items: center; gap: 5px; }
-  .eng-icon { font-size: 16px; }
+.attachment { margin-top: 8px; border-radius: 10px; overflow: hidden; background: #f0f2f5; }
+.attachment img { width: 100%; max-height: 380px; object-fit: cover; display: block; cursor: zoom-in; }
+.attachment-link { padding: 10px 12px; font-size: 13px; }
+.attachment-link a { color: #1877f2; text-decoration: none; }
 
-  .comments-section { padding: 10px 16px 14px; }
-  .comments-toggle { font-size: 14px; color: #1877f2; cursor: pointer; font-weight: 600; margin-bottom: 8px; }
-  .comments-toggle:hover { text-decoration: underline; }
-  .comment { display: flex; gap: 8px; margin-bottom: 8px; }
-  .comment-avatar {
-    width: 32px; height: 32px; border-radius: 50%;
-    background: linear-gradient(135deg, #f7971e, #ffd200);
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-size: 12px; font-weight: 700; flex-shrink: 0;
-  }
-  .comment-bubble { background: #f0f2f5; border-radius: 18px; padding: 8px 12px; flex: 1; }
-  .comment-author { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
-  .comment-text { font-size: 14px; line-height: 1.4; }
+.card-stats {
+  padding: 8px 16px; border-top: 1px solid #f0f2f5; border-bottom: 1px solid #f0f2f5;
+  display: flex; gap: 18px;
+}
+.stat { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #65676b; }
+.stat-icon { font-size: 15px; }
 
-  .post-link { padding: 10px 16px 14px; }
-  .post-link a { font-size: 13px; color: #65676b; text-decoration: none; }
-  .post-link a:hover { text-decoration: underline; color: #1877f2; }
+.comments-wrap { padding: 10px 16px; }
+.comments-toggle { font-size: 13px; font-weight: 600; color: #1877f2; cursor: pointer; display: inline-block; }
+.comments-toggle:hover { text-decoration: underline; }
+.comments-list { margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
+.comment { display: flex; gap: 8px; }
+.comment-av { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg,#f7971e,#ffd200); display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.comment-bubble { background: #f0f2f5; border-radius: 16px; padding: 7px 11px; flex: 1; }
+.comment-name { font-weight: 700; font-size: 12px; margin-bottom: 2px; }
+.comment-msg { font-size: 13px; line-height: 1.4; }
 
-  .skeleton { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
-  .skel-line { background: #e4e6eb; border-radius: 4px; margin-bottom: 10px; animation: pulse 1.2s ease-in-out infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+.card-footer { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.post-link a { font-size: 12px; color: #65676b; text-decoration: none; }
+.post-link a:hover { color: #1877f2; }
+.btn-write-comment { font-size: 13px; font-weight: 600; color: #1877f2; cursor: pointer; border: none; background: none; padding: 0; }
+.btn-write-comment:hover { text-decoration: underline; }
 
-  .empty { text-align: center; padding: 60px 20px; color: #65676b; }
-  .empty .icon { font-size: 48px; margin-bottom: 12px; }
+.comment-box { padding: 0 16px 14px; display: none; flex-direction: column; gap: 8px; }
+.comment-box.open { display: flex; }
+.comment-textarea { width: 100%; padding: 9px 13px; border-radius: 20px; border: 1.5px solid #e4e6eb; font-size: 13px; font-family: inherit; resize: none; min-height: 60px; outline: none; transition: border .15s; }
+.comment-textarea:focus { border-color: #1877f2; }
+.comment-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.comment-as { padding: 6px 10px; border-radius: 20px; border: 1.5px solid #e4e6eb; font-size: 12px; background: white; flex: 1; min-width: 130px; outline: none; cursor: pointer; }
+.btn-send { padding: 7px 18px; border-radius: 20px; border: none; background: #1877f2; color: white; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-send:hover { background: #1464d8; }
+.btn-send:disabled { opacity: .5; cursor: not-allowed; }
+.comment-msg-result { font-size: 12px; color: #65676b; }
 
-  .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.9); z-index: 1000; align-items: center; justify-content: center; }
-  .lightbox.open { display: flex; }
-  .lightbox img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 4px; }
-  .lightbox-close { position: absolute; top: 16px; right: 20px; color: white; font-size: 32px; cursor: pointer; }
+/* ── Skeleton ── */
+.skeleton { background: white; border-radius: 14px; padding: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+.skel { background: linear-gradient(90deg, #e4e6eb 25%, #f0f2f5 50%, #e4e6eb 75%); background-size: 200% 100%; border-radius: 6px; animation: shimmer 1.4s infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ── Empty ── */
+.empty { text-align: center; padding: 60px 20px; color: #65676b; }
+.empty-icon { font-size: 44px; margin-bottom: 10px; }
+.empty-title { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+.empty-sub { font-size: 13px; }
+
+/* ── Lightbox ── */
+.lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.9); z-index: 1000; align-items: center; justify-content: center; }
+.lightbox.open { display: flex; }
+.lightbox img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 6px; }
+.lightbox-close { position: absolute; top: 14px; right: 18px; color: white; font-size: 30px; cursor: pointer; line-height: 1; }
+
+/* ── Post modal ── */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 500; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: 18px; padding: 24px; width: 520px; max-width: 95vw; max-height: 92vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.18); }
+.modal-hd { font-size: 17px; font-weight: 700; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+.modal-close { cursor: pointer; font-size: 20px; color: #65676b; line-height: 1; }
+.modal-close:hover { color: #1c1e21; }
+.field { margin-bottom: 14px; }
+.field label { font-size: 12px; font-weight: 700; color: #65676b; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; display: block; }
+.field select, .field textarea { width: 100%; padding: 10px 13px; border-radius: 10px; border: 1.5px solid #e4e6eb; font-size: 14px; font-family: inherit; outline: none; transition: border .15s; }
+.field select:focus, .field textarea:focus { border-color: #1877f2; }
+.field textarea { min-height: 130px; resize: vertical; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.btn-cancel { padding: 9px 20px; border-radius: 10px; border: 1.5px solid #e4e6eb; background: white; font-size: 14px; cursor: pointer; }
+.btn-cancel:hover { background: #f5f5f5; }
+.btn-submit { padding: 9px 24px; border-radius: 10px; border: none; background: #1877f2; color: white; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn-submit:hover { background: #1464d8; }
+.btn-submit:disabled { opacity: .5; cursor: not-allowed; }
+.modal-result { font-size: 13px; margin-top: 8px; min-height: 18px; }
+
+/* ── Highlight ── */
+.hl { background: #fff3cd; border-radius: 3px; padding: 0 2px; font-weight: 600; }
+.new-badge { display: inline-block; background: #e41e3f; color: white; border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 6px; }
 </style>
 </head>
 <body>
 
+<!-- Header -->
 <div class="header">
-  <div style="font-size:28px">👥</div>
+  <div class="header-icon">👥</div>
   <div>
-    <h1>Facebook Group Posts</h1>
-    <div class="subtitle" id="headerSubtitle">Quản lý bài viết nhóm Facebook</div>
+    <div class="header-title">FB Group Monitor</div>
+    <div class="header-sub" id="headerSub">Đang tải...</div>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="header-status" id="headerStatus"></div>
+</div>
+
+<div class="main">
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <select id="limitSel">
+      <option value="5">5 bài</option>
+      <option value="10" selected>10 bài</option>
+      <option value="20">20 bài</option>
+      <option value="50">50 bài</option>
+    </select>
+    <button class="btn btn-primary" onclick="loadPosts()"><span id="refIcon">🔄</span> Tải lại</button>
+    <button class="btn btn-success" onclick="openPostModal()">✍️ Đăng bài</button>
+    <div class="interval-wrap">
+      <button class="btn btn-auto" id="btnAuto" onclick="toggleAuto()">⏱ Tự động</button>
+      <input type="number" id="intervalInp" value="5" min="1" max="60">
+      <span class="unit">phút</span>
+    </div>
+    <div class="toolbar-spacer"></div>
+    <span class="toolbar-status" id="toolStatus"></span>
+  </div>
+
+  <!-- Group bar -->
+  <div class="panel">
+    <div class="panel-label">📋 Nhóm</div>
+    <div class="chips" id="groupChips"></div>
+    <div class="input-row">
+      <input type="text" id="groupInp" placeholder="ID / URL nhóm">
+      <button class="btn-add btn-add-blue" onclick="addGroup()" title="Thêm nhóm">+</button>
+    </div>
+  </div>
+
+  <!-- Keyword bar -->
+  <div class="panel">
+    <div class="panel-label">🔍 Từ khoá</div>
+    <div class="chips" id="kwChips"></div>
+    <div class="input-row">
+      <input type="text" id="kwInp" placeholder="Nhập từ khoá">
+      <button class="btn-add btn-add-orange" onclick="addKw()" title="Thêm từ khoá">+</button>
+    </div>
+    <div class="panel-hint" id="kwHint"></div>
+  </div>
+
+  <!-- Telegram bar -->
+  <div class="panel">
+    <div class="panel-label">✈️ Telegram</div>
+    <div class="chips" id="tgChips"></div>
+    <div class="input-row">
+      <input type="text" id="tgInp" placeholder="Chat ID">
+      <button class="btn-add btn-add-tg" onclick="addTg()" title="Thêm chat ID">+</button>
+    </div>
+    <div class="panel-hint">Nhắn <b>/start</b> cho <b>@fb_noti_tai_bot</b> → nhận Chat ID tự động</div>
+    <div style="font-size:12px;color:#65676b;width:100%" id="tgStatus"></div>
+  </div>
+
+  <!-- Feed -->
+  <div class="feed" id="feed">
+    <div class="skeleton">
+      <div class="skel" style="width:38%;height:13px;margin-bottom:10px"></div>
+      <div class="skel" style="width:100%;height:11px;margin-bottom:7px"></div>
+      <div class="skel" style="width:78%;height:11px"></div>
+    </div>
+    <div class="skeleton">
+      <div class="skel" style="width:45%;height:13px;margin-bottom:10px"></div>
+      <div class="skel" style="width:100%;height:11px;margin-bottom:7px"></div>
+      <div class="skel" style="width:85%;height:11px"></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- Post modal -->
+<div class="modal-overlay" id="postModal" onclick="if(event.target===this)closePostModal()">
+  <div class="modal">
+    <div class="modal-hd">✍️ Đăng bài mới <span class="modal-close" onclick="closePostModal()">✕</span></div>
+    <div class="field"><label>Nhóm</label><select id="postGroupSel"></select></div>
+    <div class="field"><label>Đăng với tư cách</label><select id="postIdSel"><option value="">👤 Cá nhân</option></select></div>
+    <div class="field"><label>Nội dung</label><textarea id="postContent" placeholder="Bạn đang nghĩ gì?"></textarea></div>
+    <div class="modal-result" id="postResult"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closePostModal()">Huỷ</button>
+      <button class="btn-submit" id="btnPost" onclick="submitPost()">Đăng bài</button>
+    </div>
   </div>
 </div>
 
-<div class="toolbar">
-  <select id="limitSelect">
-    <option value="5">5 bài</option>
-    <option value="10" selected>10 bài</option>
-    <option value="20">20 bài</option>
-    <option value="50">50 bài</option>
-  </select>
-  <button class="btn-refresh" onclick="loadPosts()">
-    <span id="refreshIcon">🔄</span> Tải bài viết
-  </button>
-  <div class="auto-refresh-wrap">
-    <button class="btn-auto" id="btnAuto" onclick="toggleAutoRefresh()">⏱ Tự động</button>
-    <input type="number" id="intervalInput" value="5" min="1" max="60">
-    <span class="unit">phút</span>
-  </div>
-  <span class="status-text" id="statusText"></span>
-</div>
-
-<div class="group-bar">
-  <div class="group-bar-label">📋 Group IDs</div>
-  <div id="groupTags" class="group-tags"></div>
-  <div class="group-input-wrap">
-    <input type="text" id="groupInput" placeholder="ID hoặc URL nhóm + Enter" />
-    <button onclick="addGroup()">＋</button>
-  </div>
-</div>
-
-<div class="kw-bar">
-  <div class="kw-bar-label">🔍 Từ khoá</div>
-  <div id="kwTags" class="kw-tags"></div>
-  <div class="kw-input-wrap">
-    <input type="text" id="kwInput" placeholder="Nhập từ khoá + Enter" />
-    <button class="btn-kw-add" onclick="addKeyword()">＋</button>
-  </div>
-  <span class="kw-hint" id="kwHint"></span>
-</div>
-
-<div class="tg-bar">
-  <div class="tg-bar-label">✈️ Telegram</div>
-  <div id="tgTags" class="tg-tags"></div>
-  <div class="tg-input-wrap">
-    <input type="text" id="tgChatInput" placeholder="Chat ID" />
-    <button class="btn-tg-add" onclick="addTgChatId()">＋</button>
-  </div>
-  <span class="tg-status" id="tgStatus"></span>
-  <div class="tg-hint">💡 Nhắn <b>/start</b> cho <b>@fb_noti_tai_bot</b> để nhận Chat ID tự động</div>
-</div>
-
-<div class="feed" id="feed">
-  <div class="skeleton">
-    <div class="skel-line" style="width:40%;height:14px"></div>
-    <div class="skel-line" style="width:100%;height:12px"></div>
-    <div class="skel-line" style="width:85%;height:12px"></div>
-  </div>
-  <div class="skeleton">
-    <div class="skel-line" style="width:35%;height:14px"></div>
-    <div class="skel-line" style="width:100%;height:12px"></div>
-    <div class="skel-line" style="width:90%;height:12px"></div>
-  </div>
-</div>
-
+<!-- Lightbox -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <span class="lightbox-close">✕</span>
-  <img id="lightboxImg" src="">
+  <span class="lightbox-close" onclick="closeLightbox()">✕</span>
+  <img id="lbImg" src="">
 </div>
 
 <script>
-// ── Helpers ──────────────────────────────────────────
-function timeAgo(isoStr) {
-  const diff = Math.floor((Date.now() - new Date(isoStr)) / 1000);
-  if (diff < 60) return diff + ' giây trước';
-  if (diff < 3600) return Math.floor(diff/60) + ' phút trước';
-  if (diff < 86400) return Math.floor(diff/3600) + ' giờ trước';
-  if (diff < 2592000) return Math.floor(diff/86400) + ' ngày trước';
-  return new Date(isoStr).toLocaleDateString('vi-VN');
+// ── Helpers ────────────────────────────────────────────
+function timeAgo(iso) {
+  const d = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (d < 60) return d + 's trước';
+  if (d < 3600) return Math.floor(d/60) + ' phút trước';
+  if (d < 86400) return Math.floor(d/3600) + ' giờ trước';
+  if (d < 2592000) return Math.floor(d/86400) + ' ngày trước';
+  return new Date(iso).toLocaleDateString('vi-VN');
 }
-function getInitial(name) {
-  if (!name) return '?';
-  return name.trim().split(' ').pop()[0].toUpperCase();
-}
-function openLightbox(src) {
-  document.getElementById('lightboxImg').src = src;
-  document.getElementById('lightbox').classList.add('open');
-}
+function initials(name) { return name ? name.trim().split(' ').pop()[0].toUpperCase() : '?'; }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const COLORS = ['#1877f2','#e41e3f','#2dba4e','#f7a21e','#9b59b6','#1abc9c'];
+function avatarColor(name) { let h=0; for(let c of name||'?') h=(h*31+c.charCodeAt(0))&0xffff; return COLORS[h%COLORS.length]; }
+
+function openLightbox(src) { document.getElementById('lbImg').src=src; document.getElementById('lightbox').classList.add('open'); }
 function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
 
-// ── Render post ───────────────────────────────────────
-function renderPost(post) {
-  const author = post.from || {};
-  const authorName = author.name || 'Ẩn danh';
-  const isHidden = post.is_hidden;
-  const reactions = post.reactions?.summary?.total_count || 0;
-  const shares = post.shares?.count || 0;
-  const commentsData = post.comments || {};
-  const commentsList = commentsData.data || [];
-  const commentsCount = commentsData.summary?.total_count || 0;
-  const text = post.message || '';
-  const needsExpand = text.length > 300;
-  const postId = post.id.split('_')[1] || post.id;
+// ── State ─────────────────────────────────────────────
+let groups     = [];      // string[]  — list of group IDs
+let groupNames = {};      // {id: name}
+let keywords   = [];
+let tgIds      = [];
+let pages      = [];
+let allPosts   = [];
 
+// ── Render post ────────────────────────────────────────
+function renderPost(post) {
+  const authorName = (post.from || {}).name || 'Ẩn danh';
+  const reactions  = post.reactions?.summary?.total_count || 0;
+  const shares     = post.shares?.count || 0;
+  const cData      = post.comments || {};
+  const cList      = cData.data || [];
+  const cCount     = cData.summary?.total_count || 0;
+  const text       = post.message || '';
+  const long       = text.length > 300;
+  const pid        = (post.id.split('_')[1] || post.id);
+  const gid        = post['_group_id'] || '';
+  const gName      = (gid && groupNames[gid]) ? groupNames[gid] : gid;
+
+  // Attachments
   const atts = (post.attachments || {}).data || [];
-  const attachmentsHTML = atts.map(att => {
-    if (att.type === 'photo') {
-      const src = att.media?.image?.src || '';
-      return src ? `<div class="attachment"><img src="${src}" onclick="openLightbox('${src}')" loading="lazy"></div>` : '';
+  const attHtml = atts.map(a => {
+    if (a.type === 'photo') {
+      const src = a.media?.image?.src || '';
+      return src ? `<div class="attachment"><img src="${esc(src)}" onclick="openLightbox('${esc(src)}')" loading="lazy"></div>` : '';
     }
-    if (att.type === 'video') {
-      const src = att.media?.source || '';
-      return src ? `<div class="attachment" style="padding:10px;background:#f0f2f5;border-radius:8px;font-size:13px">🎥 <a href="${src}" target="_blank">Xem video</a></div>` : '';
+    if (a.type === 'video') {
+      const src = a.media?.source || '';
+      return src ? `<div class="attachment attachment-link">🎥 <a href="${esc(src)}" target="_blank">Xem video</a></div>` : '';
     }
-    if (['share','link'].includes(att.type)) {
-      const url = att.url || '';
-      return url ? `<div class="attachment" style="padding:10px;background:#f0f2f5;border-radius:8px;font-size:13px">🔗 <a href="${url}" target="_blank">${url.substring(0,60)}...</a></div>` : '';
+    if (['share','link'].includes(a.type)) {
+      const url = a.url || '';
+      return url ? `<div class="attachment attachment-link">🔗 <a href="${esc(url)}" target="_blank">${esc(url.substring(0,60))}…</a></div>` : '';
     }
     return '';
   }).join('');
 
-  const commentsHTML = commentsList.map(c => {
-    const cName = (c.from || {}).name || 'Ẩn danh';
+  // Comments preview
+  const cHtml = cList.map(c => {
+    const cn = (c.from||{}).name || 'Ẩn danh';
     return `<div class="comment">
-      <div class="comment-avatar">${getInitial(cName)}</div>
+      <div class="comment-av">${initials(cn)}</div>
       <div class="comment-bubble">
-        <div class="comment-author">${cName}</div>
-        <div class="comment-text">${c.message || ''}</div>
+        <div class="comment-name">${esc(cn)}</div>
+        <div class="comment-msg">${esc(c.message||'')}</div>
       </div>
     </div>`;
   }).join('');
 
-  const commentsSection = commentsCount > 0 ? `
-    <div class="comments-section">
-      <div class="comments-toggle" onclick="toggleComments(this)">${commentsCount} bình luận ▼</div>
-      <div class="comments-list" style="display:none">${commentsHTML || '<div style="color:#65676b;font-size:13px">Chưa tải được bình luận</div>'}</div>
+  const commentsSection = cCount > 0 ? `
+    <div class="comments-wrap">
+      <span class="comments-toggle" onclick="toggleCmts(this)">💬 ${cCount} bình luận ▾</span>
+      <div class="comments-list" style="display:none">${cHtml || '<div style="font-size:13px;color:#65676b">Không có bình luận</div>'}</div>
     </div>` : '';
 
-  const groupBadge = post._group_id && groups.length > 1
-    ? `<span class="dot"></span><span class="badge-group">📋 ${post._group_id}</span>` : '';
+  const statusBadge = post.is_hidden
+    ? `<span class="badge badge-pending">⏳ Chờ duyệt</span>`
+    : `<span class="badge badge-ok">✅ Đã đăng</span>`;
+
+  const groupBadge = gid
+    ? `<span class="meta-dot"></span><span class="badge badge-group" title="${esc(gName)}\nID: ${gid}">📋 ${esc(gName)}</span>`
+    : '';
 
   return `<div class="card">
-    <div class="card-header">
-      <div class="avatar">${getInitial(authorName)}</div>
-      <div class="author-info">
-        <div class="author-name">${authorName}</div>
-        <div class="post-meta">
-          <span>${timeAgo(post.created_time)}</span>
-          <span class="dot"></span>
-          <span class="badge ${isHidden ? 'badge-pending' : 'badge-published'}">${isHidden ? '⏳ Chờ duyệt' : '✅ Đã đăng'}</span>
-          ${groupBadge}
-        </div>
+  <div class="card-header">
+    <div class="avatar" style="background:${avatarColor(authorName)}">${initials(authorName)}</div>
+    <div class="author-info">
+      <div class="author-name">${esc(authorName)}</div>
+      <div class="post-meta">
+        <span class="meta-time">${timeAgo(post.created_time)}</span>
+        <span class="meta-dot"></span>
+        ${statusBadge}
+        ${groupBadge}
       </div>
     </div>
-    <div class="card-body">
-      ${text ? `<div class="post-text ${needsExpand ? 'collapsed' : ''}" id="text-${postId}">${highlightText(text)}</div>
-      ${needsExpand ? `<span class="see-more" onclick="expandText('text-${postId}',this)">Xem thêm</span>` : ''}` : ''}
-      ${attachmentsHTML}
+  </div>
+  ${text ? `<div class="card-body">
+    <div class="post-text${long?' collapsed':''}" id="pt-${pid}">${highlight(text)}</div>
+    ${long ? `<span class="see-more" onclick="expandTxt('pt-${pid}',this)">Xem thêm ▾</span>` : ''}
+  </div>` : ''}
+  ${attHtml ? `<div class="card-body" style="padding-top:0">${attHtml}</div>` : ''}
+  <div class="card-stats">
+    <div class="stat"><span class="stat-icon">❤️</span> ${reactions}</div>
+    <div class="stat"><span class="stat-icon">💬</span> ${cCount}</div>
+    <div class="stat"><span class="stat-icon">↗️</span> ${shares}</div>
+  </div>
+  ${commentsSection}
+  <div class="card-footer">
+    <div class="post-link"><a href="${post.permalink_url||'#'}" target="_blank">🔗 Xem trên Facebook</a></div>
+    <button class="btn-write-comment" onclick="toggleCmtBox(this)">✏️ Bình luận</button>
+  </div>
+  <div class="comment-box" data-post="${post.id}" data-group="${gid}">
+    <textarea class="comment-textarea" rows="2" placeholder="Nhập bình luận..."></textarea>
+    <div class="comment-row">
+      <select class="comment-as"><option value="">👤 Cá nhân</option></select>
+      <button class="btn-send" onclick="sendComment(this)">Gửi</button>
+      <span class="comment-msg-result"></span>
     </div>
-    <div class="engagement">
-      <div class="eng-item"><span class="eng-icon">❤️</span> ${reactions}</div>
-      <div class="eng-item"><span class="eng-icon">💬</span> ${commentsCount}</div>
-      <div class="eng-item"><span class="eng-icon">↗️</span> ${shares}</div>
-    </div>
-    ${commentsSection}
-    <div class="post-link"><a href="${post.permalink_url || '#'}" target="_blank">🔗 Xem trên Facebook</a></div>
-    <div class="comment-input-section">
-      <span class="comment-input-toggle" onclick="toggleCommentBox(this)">✏️ Viết bình luận</span>
-      <div class="comment-input-wrap" style="display:none">
-        <textarea class="comment-textarea" placeholder="Nhập bình luận..."></textarea>
-        <div class="comment-actions">
-          <button class="btn-comment-send" onclick="submitComment('${post.id}','${post._group_id}',this)">Gửi</button>
-          <span class="comment-result"></span>
-        </div>
-      </div>
-    </div>
-  </div>`;
+  </div>
+</div>`;
 }
 
-function expandText(id, el) { document.getElementById(id).classList.remove('collapsed'); el.remove(); }
-function toggleComments(el) {
+function expandTxt(id, el) { document.getElementById(id).classList.remove('collapsed'); el.remove(); }
+function toggleCmts(el) {
   const list = el.nextElementSibling;
   const open = list.style.display === 'none';
-  list.style.display = open ? 'block' : 'none';
-  el.textContent = el.textContent.replace(open ? '▼' : '▲', open ? '▲' : '▼');
+  list.style.display = open ? 'flex' : 'none';
+  el.textContent = el.textContent.replace(open ? '▾' : '▴', open ? '▴' : '▾');
 }
-
-// ── Load posts ────────────────────────────────────────
-async function loadPosts() {
-  const limit = document.getElementById('limitSelect').value;
-  const feed = document.getElementById('feed');
-  const icon = document.getElementById('refreshIcon');
-  const status = document.getElementById('statusText');
-  const skel = `<div class="skeleton">
-    <div class="skel-line" style="width:40%;height:14px"></div>
-    <div class="skel-line" style="width:100%;height:12px;margin-top:14px"></div>
-    <div class="skel-line" style="width:80%;height:12px"></div>
-  </div>`;
-
-  icon.style.animation = 'spin 1s linear infinite';
-  document.head.insertAdjacentHTML('beforeend','<style>@keyframes spin{to{transform:rotate(360deg)}}</style>');
-  status.textContent = 'Đang tải...';
-  feed.innerHTML = skel.repeat(3);
-
-  try {
-    const res = await fetch(`/api/posts?limit=${limit}&groups=${groups.join(',')}`);
-    const data = await res.json();
-
-    if (data.error) {
-      feed.innerHTML = `<div class="empty"><div class="icon">🍪</div><p style="font-weight:600;margin-bottom:8px">Lỗi xác thực</p><p style="font-size:13px;color:#65676b">${data.error}</p></div>`;
-      status.textContent = 'Lỗi'; return;
-    }
-    if (!data.length) {
-      feed.innerHTML = `<div class="empty"><div class="icon">📭</div><p>Không có bài viết nào</p></div>`;
-      status.textContent = '0 bài'; return;
-    }
-
-    _allPosts = data;
-    applyFilter();
-    const now = new Date().toLocaleTimeString('vi-VN');
-    const knownIds = JSON.parse(localStorage.getItem('seenPostIds') || '[]');
-    const knownSet = new Set(knownIds);
-    const fresh = data.filter(p => !knownSet.has(p.id));
-    data.forEach(p => knownSet.add(p.id));
-    localStorage.setItem('seenPostIds', JSON.stringify([...knownSet].slice(-500)));
-    const badge = fresh.length > 0 && knownIds.length > 0 ? ` <span class="tg-noti-badge">+${fresh.length} mới</span>` : '';
-    status.innerHTML = `${data.length} bài · ${now}${badge}`;
-    status.dataset.base = `${data.length} bài · ${now}`;
-  } catch {
-    feed.innerHTML = `<div class="empty"><div class="icon">⚠️</div><p>Lỗi kết nối server</p></div>`;
-    status.textContent = 'Lỗi';
-  } finally {
-    icon.style.animation = '';
+function toggleCmtBox(btn) {
+  const box = btn.closest('.card').querySelector('.comment-box');
+  const open = !box.classList.contains('open');
+  box.classList.toggle('open', open);
+  btn.textContent = open ? '✖ Đóng' : '✏️ Bình luận';
+  if (open) {
+    fillPageOptions(box.querySelector('.comment-as'));
+    box.querySelector('.comment-textarea').focus();
   }
 }
 
-// ── Auto refresh ──────────────────────────────────────
-let autoTimer = null, countdownTimer = null, secondsLeft = 0;
-
-function toggleAutoRefresh() { autoTimer ? stopAutoRefresh() : startAutoRefresh(); }
-
-function startAutoRefresh() {
-  const minutes = parseInt(document.getElementById('intervalInput').value) || 5;
-  if (minutes < 1) return;
-  document.getElementById('btnAuto').classList.add('active');
-  document.getElementById('btnAuto').textContent = '⏹ Dừng';
-  document.getElementById('intervalInput').disabled = true;
-  scheduleNext(minutes * 60);
-}
-
-function stopAutoRefresh() {
-  clearTimeout(autoTimer); clearInterval(countdownTimer);
-  autoTimer = countdownTimer = null;
-  document.getElementById('btnAuto').classList.remove('active');
-  document.getElementById('btnAuto').textContent = '⏱ Tự động';
-  document.getElementById('intervalInput').disabled = false;
-  const st = document.getElementById('statusText');
-  st.textContent = st.dataset.base || st.textContent;
-}
-
-function scheduleNext(seconds) {
-  secondsLeft = seconds;
-  clearInterval(countdownTimer);
-  countdownTimer = setInterval(() => { if (--secondsLeft <= 0) clearInterval(countdownTimer); updateCountdown(); }, 1000);
-  autoTimer = setTimeout(() => {
-    loadPosts().then(() => scheduleNext((parseInt(document.getElementById('intervalInput').value) || 5) * 60));
-  }, seconds * 1000);
-}
-
-function updateCountdown() {
-  const status = document.getElementById('statusText');
-  const base = status.dataset.base || status.textContent.replace(/ [(].*[)]$/, '');
-  status.dataset.base = base;
-  const m = Math.floor(secondsLeft / 60), s = secondsLeft % 60;
-  status.textContent = base + (m > 0 ? ` (tải lại sau ${m}p${s}s)` : ` (tải lại sau ${s}s)`);
-}
-
-// ── Group management ──────────────────────────────────
-let groups = ['3809441172650624'];
-
-function renderGroupTags() {
-  document.getElementById('groupTags').innerHTML = groups.map(gid =>
-    `<div class="group-tag"><span>${gid}</span><span class="remove" onclick="removeGroup('${gid}')">✕</span></div>`
-  ).join('');
-  document.getElementById('headerSubtitle').textContent = groups.length === 1
-    ? `Nhóm: ${groups[0]}` : `${groups.length} nhóm đang theo dõi`;
-}
-
-function extractGroupSlug(raw) {
-  try {
-    const url = new URL(raw.includes('://') ? raw : 'https://' + raw);
-    const parts = url.pathname.split('/').filter(Boolean);
-    const idx = parts.indexOf('groups');
-    if (idx !== -1 && parts[idx + 1]) return parts[idx + 1].replace(/[^a-zA-Z0-9._-]/g, '');
-  } catch {}
-  return raw.trim().replace(/[^a-zA-Z0-9._-]/g, '');
-}
-
-async function addGroup() {
-  const input = document.getElementById('groupInput');
-  const raw = input.value.trim();
-  if (!raw) return;
-  input.value = '';
-  input.disabled = true;
-  const slug = extractGroupSlug(raw);
-
-  if (/^[0-9]+$/.test(slug)) {
-    if (!groups.includes(slug)) { groups.push(slug); renderGroupTags(); }
-    input.disabled = false; return;
-  }
-
-  const status = document.getElementById('statusText');
-  const prev = status.dataset.base || status.textContent;
-  status.textContent = `🔍 Đang tìm ID cho "${slug}"...`;
-  try {
-    const r = await fetch(`/api/groups/resolve?slug=${encodeURIComponent(slug)}`);
-    const d = await r.json();
-    if (d.ok) {
-      if (!groups.includes(d.id)) { groups.push(d.id); renderGroupTags(); }
-      status.textContent = d.name ? `✅ Đã thêm: ${d.name} (${d.id})` : `✅ Đã thêm ${d.id}`;
-    } else {
-      status.textContent = `❌ Không tìm được: ${d.error}`;
-    }
-  } catch { status.textContent = '❌ Lỗi kết nối'; }
-  setTimeout(() => { status.textContent = prev; }, 4000);
-  input.disabled = false;
-}
-
-function removeGroup(gid) {
-  if (groups.length <= 1) return;
-  groups = groups.filter(g => g !== gid);
-  renderGroupTags();
-}
-
-document.getElementById('groupInput').addEventListener('keydown', e => { if (e.key === 'Enter') addGroup(); });
-
-// ── Telegram management ───────────────────────────────
-let tgChatIds = [];
-
-function renderTgTags() {
-  document.getElementById('tgTags').innerHTML = tgChatIds.map(cid =>
-    `<div class="tg-tag">
-      <span>${cid}</span>
-      <span class="test-btn" onclick="testTg('${cid}')">Test</span>
-      <span class="remove" onclick="removeTgChatId('${cid}')">✕</span>
-    </div>`
-  ).join('');
-}
-
-async function loadTgChatIds() {
-  const r = await fetch('/api/telegram/chatids');
-  tgChatIds = await r.json();
-  renderTgTags();
-}
-
-async function addTgChatId() {
-  const input = document.getElementById('tgChatInput');
-  const cid = input.value.trim().replace(/[^0-9-]/g, '');
-  if (!cid) return;
-  input.value = '';
-  const r = await fetch('/api/telegram/chatids', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ chat_id: cid })
-  });
-  const d = await r.json();
-  if (d.ok) { tgChatIds = d.chat_ids; renderTgTags(); }
-}
-
-async function removeTgChatId(cid) {
-  const r = await fetch(`/api/telegram/chatids/${cid}`, { method: 'DELETE' });
-  const d = await r.json();
-  tgChatIds = d.chat_ids;
-  renderTgTags();
-}
-
-async function testTg(cid) {
-  const st = document.getElementById('tgStatus');
-  st.textContent = '⏳ Đang gửi...';
-  try {
-    const r = await fetch(`/api/telegram/test/${cid}`, { method: 'POST' });
-    const d = await r.json();
-    st.textContent = d.ok ? '✅ Gửi thành công!' : '❌ ' + (d.error || 'Lỗi');
-  } catch { st.textContent = '❌ Lỗi kết nối'; }
-  setTimeout(() => { st.textContent = ''; }, 3000);
-}
-
-document.getElementById('tgChatInput').addEventListener('keydown', e => { if (e.key === 'Enter') addTgChatId(); });
-
-// ── Comment ───────────────────────────────────────────
-function toggleCommentBox(el) {
-  const wrap = el.nextElementSibling;
-  const open = wrap.style.display === 'none';
-  wrap.style.display = open ? 'flex' : 'none';
-  el.textContent = open ? '✖ Đóng' : '✏️ Viết bình luận';
-  if (open) wrap.querySelector('textarea').focus();
-}
-
-async function submitComment(postId, groupId, btn) {
-  const wrap = btn.closest('.comment-input-wrap');
-  const textarea = wrap.querySelector('.comment-textarea');
-  const result = wrap.querySelector('.comment-result');
-  const message = textarea.value.trim();
+// ── Comment send ───────────────────────────────────────
+async function sendComment(btn) {
+  const box     = btn.closest('.comment-box');
+  const ta      = box.querySelector('.comment-textarea');
+  const sel     = box.querySelector('.comment-as');
+  const result  = box.querySelector('.comment-msg-result');
+  const message = ta.value.trim();
+  const post_id = box.dataset.post;
+  const group_id= box.dataset.group;
   if (!message) return;
-
   btn.disabled = true;
-  result.textContent = '⏳ Đang gửi...';
-
+  result.textContent = '⏳ Đang gửi…';
   try {
     const r = await fetch('/api/comment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ post_id: postId, group_id: groupId, message }),
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ post_id, group_id, message, page_id: sel.value })
     });
     const d = await r.json();
-    if (d.ok) {
-      textarea.value = '';
-      result.textContent = '✅ Đã bình luận!';
-    } else {
-      result.textContent = '❌ ' + (d.error || 'Lỗi');
-    }
-  } catch {
-    result.textContent = '❌ Lỗi kết nối';
-  }
-
+    if (d.ok) { ta.value=''; result.textContent='✅ Đã bình luận!'; }
+    else result.textContent = '❌ ' + (d.error||'Lỗi');
+  } catch { result.textContent = '❌ Lỗi kết nối'; }
   btn.disabled = false;
   setTimeout(() => { result.textContent = ''; }, 4000);
 }
 
-// ── Keyword filter ────────────────────────────────────
-let keywords = [];
+// ── Pages ──────────────────────────────────────────────
+async function loadPages() {
+  try {
+    const r = await fetch('/api/pages');
+    const d = await r.json();
+    if (Array.isArray(d)) pages = d;
+  } catch {}
+}
+function fillPageOptions(sel) {
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">👤 Cá nhân</option>' +
+    pages.map(p => `<option value="${p.id}">📄 ${esc(p.name)}</option>`).join('');
+  sel.value = cur;
+}
 
-function renderKwTags() {
-  document.getElementById('kwTags').innerHTML = keywords.map(kw =>
-    `<div class="kw-tag"><span>${kw}</span><span class="remove" onclick="removeKeyword('${kw.replace(/'/g,"\\'")}')">✕</span></div>`
+// ── Keyword filter ─────────────────────────────────────
+function renderKwChips() {
+  document.getElementById('kwChips').innerHTML = keywords.map(kw =>
+    `<div class="chip chip-kw"><span class="chip-text">${esc(kw)}</span><span class="chip-remove" onclick="removeKw('${esc(kw)}')">✕</span></div>`
   ).join('');
-  const hint = document.getElementById('kwHint');
-  hint.textContent = keywords.length ? `Chỉ hiển thị bài chứa ít nhất 1 từ khoá` : '';
+  document.getElementById('kwHint').textContent = keywords.length ? 'Chỉ hiển thị bài chứa ít nhất 1 từ khoá' : '';
 }
-
-function addKeyword() {
-  const input = document.getElementById('kwInput');
-  const val = input.value.trim();
-  if (!val || keywords.includes(val)) { input.value = ''; return; }
-  keywords.push(val);
-  input.value = '';
-  renderKwTags();
-  applyFilter();
+function addKw() {
+  const inp = document.getElementById('kwInp');
+  const v = inp.value.trim();
+  if (!v || keywords.includes(v)) { inp.value=''; return; }
+  keywords.push(v); inp.value='';
+  renderKwChips(); applyFilter();
 }
-
-function removeKeyword(kw) {
-  keywords = keywords.filter(k => k !== kw);
-  renderKwTags();
-  applyFilter();
-}
-
-function matchesKeywords(post) {
+function removeKw(kw) { keywords=keywords.filter(k=>k!==kw); renderKwChips(); applyFilter(); }
+function matchKw(post) {
   if (!keywords.length) return true;
-  const haystack = [
-    post.message || '',
-    (post.from || {}).name || '',
-  ].join(' ').toLowerCase();
-  return keywords.some(kw => haystack.includes(kw.toLowerCase()));
+  const hay = ((post.message||'') + ' ' + ((post.from||{}).name||'')).toLowerCase();
+  return keywords.some(k => hay.includes(k.toLowerCase()));
 }
-
-function highlightText(text) {
-  if (!keywords.length) return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  let escaped = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function highlight(text) {
+  let s = esc(text);
   keywords.forEach(kw => {
-    const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    escaped = escaped.replace(re, m => `<span class="kw-highlight">${m}</span>`);
+    const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
+    s = s.replace(re, m => `<span class="hl">${m}</span>`);
   });
-  return escaped;
+  return s;
 }
+document.getElementById('kwInp').addEventListener('keydown', e => { if(e.key==='Enter') addKw(); });
 
-let _allPosts = [];
-
+// ── Apply filter ───────────────────────────────────────
 function applyFilter() {
   const feed = document.getElementById('feed');
-  const filtered = _allPosts.filter(matchesKeywords);
+  const filtered = allPosts.filter(matchKw);
   if (!filtered.length) {
-    feed.innerHTML = `<div class="empty"><div class="icon">🔍</div><p>Không có bài nào khớp từ khoá</p></div>`;
+    feed.innerHTML = keywords.length
+      ? `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Không có bài khớp từ khoá</div></div>`
+      : `<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Không có bài viết nào</div></div>`;
     return;
   }
   feed.innerHTML = filtered.map(renderPost).join('');
 }
 
-document.getElementById('kwInput').addEventListener('keydown', e => { if (e.key === 'Enter') addKeyword(); });
+// ── Load posts ─────────────────────────────────────────
+async function loadPosts() {
+  const limit  = document.getElementById('limitSel').value;
+  const feed   = document.getElementById('feed');
+  const icon   = document.getElementById('refIcon');
+  const status = document.getElementById('toolStatus');
+  const skel = `<div class="skeleton">
+    <div class="skel" style="width:40%;height:13px;margin-bottom:10px"></div>
+    <div class="skel" style="width:100%;height:11px;margin-bottom:7px"></div>
+    <div class="skel" style="width:75%;height:11px"></div>
+  </div>`;
+  icon.style.animation = 'spin 1s linear infinite';
+  document.head.insertAdjacentHTML('beforeend','<style>@keyframes spin{to{transform:rotate(360deg)}}</style>');
+  status.textContent = 'Đang tải...';
+  feed.innerHTML = skel.repeat(3);
+  try {
+    const res  = await fetch(`/api/posts?limit=${limit}&groups=${groups.join(',')}`);
+    const data = await res.json();
+    if (data.error) {
+      feed.innerHTML = `<div class="empty"><div class="empty-icon">🍪</div><div class="empty-title">Lỗi xác thực</div><div class="empty-sub">${esc(data.error)}</div></div>`;
+      status.textContent = 'Lỗi'; return;
+    }
+    allPosts = data;
+    applyFilter();
+    const now   = new Date().toLocaleTimeString('vi-VN');
+    const known = new Set(JSON.parse(localStorage.getItem('seenIds')||'[]'));
+    const fresh = data.filter(p => !known.has(p.id));
+    data.forEach(p => known.add(p.id));
+    localStorage.setItem('seenIds', JSON.stringify([...known].slice(-500)));
+    const nb = fresh.length && known.size > fresh.length ? ` <span class="new-badge">+${fresh.length} mới</span>` : '';
+    status.innerHTML = `${data.length} bài · ${now}${nb}`;
+    status.dataset.base = `${data.length} bài · ${now}`;
+  } catch {
+    feed.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Lỗi kết nối server</div></div>`;
+    status.textContent = 'Lỗi';
+  } finally { icon.style.animation = ''; }
+}
 
-// ── Init ──────────────────────────────────────────────
-renderGroupTags();
-renderKwTags();
-loadTgChatIds();
-loadPosts().then(() => startAutoRefresh());
+// ── Auto refresh ───────────────────────────────────────
+let autoTimer=null, cTimer=null, secsLeft=0;
+
+function saveSettings() {
+  const auto_refresh = !!autoTimer;
+  const interval = parseInt(document.getElementById('intervalInp').value)||5;
+  fetch('/api/settings', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ auto_refresh, interval })
+  });
+}
+
+function toggleAuto() { autoTimer ? stopAuto() : startAuto(); saveSettings(); }
+
+function startAuto() {
+  const m = parseInt(document.getElementById('intervalInp').value)||5;
+  if (m<1) return;
+  document.getElementById('btnAuto').classList.add('on');
+  document.getElementById('btnAuto').textContent = '⏹ Dừng';
+  document.getElementById('intervalInp').disabled = true;
+  tick(m*60);
+}
+function stopAuto() {
+  clearTimeout(autoTimer); clearInterval(cTimer); autoTimer=cTimer=null;
+  const btn = document.getElementById('btnAuto');
+  btn.classList.remove('on'); btn.textContent = '⏱ Tự động';
+  document.getElementById('intervalInp').disabled = false;
+  const st = document.getElementById('toolStatus');
+  st.textContent = st.dataset.base || st.textContent;
+}
+function tick(secs) {
+  secsLeft=secs; clearInterval(cTimer);
+  cTimer=setInterval(()=>{ if(--secsLeft<=0) clearInterval(cTimer); showCountdown(); },1000);
+  autoTimer=setTimeout(()=>{ loadPosts().then(()=>tick((parseInt(document.getElementById('intervalInp').value)||5)*60)); }, secs*1000);
+}
+function showCountdown() {
+  const st=document.getElementById('toolStatus');
+  const base=st.dataset.base||'';
+  const m=Math.floor(secsLeft/60),s=secsLeft%60;
+  st.textContent=base+(m>0?` (${m}p${s}s)`:`  (${s}s)`);
+}
+
+document.getElementById('intervalInp').addEventListener('change', saveSettings);
+
+// ── Group management ───────────────────────────────────
+async function loadGroups() {
+  try {
+    const r = await fetch('/api/groups');
+    const data = await r.json();
+    groups = data.map(g => g.id);
+    data.forEach(g => { if (g.name) groupNames[g.id] = g.name; });
+  } catch {}
+}
+
+function renderGroupChips() {
+  document.getElementById('groupChips').innerHTML = groups.map(gid => {
+    const name = groupNames[gid] || gid;
+    return `<div class="chip chip-group" title="${esc(name)}\nID: ${gid}">
+      <span class="chip-text">${esc(name)}</span>
+      <span class="chip-remove" onclick="removeGroup('${gid}')">✕</span>
+    </div>`;
+  }).join('');
+  const sub = document.getElementById('headerSub');
+  if (groups.length === 1) {
+    const n = groupNames[groups[0]] || groups[0];
+    sub.textContent = n; sub.title = 'ID: ' + groups[0];
+  } else {
+    sub.textContent = groups.length + ' nhóm đang theo dõi'; sub.title='';
+  }
+}
+
+async function loadGroupName(gid) {
+  if (groupNames[gid]) return;
+  try {
+    const r = await fetch('/api/groups/resolve?slug=' + encodeURIComponent(gid));
+    const d = await r.json();
+    if (d.ok && d.name) { groupNames[gid] = d.name; }
+  } catch {}
+}
+
+function extractSlug(raw) {
+  try {
+    const url = new URL(raw.includes('://')?raw:'https://'+raw);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const i = parts.indexOf('groups');
+    if (i !== -1 && parts[i+1]) return parts[i+1].replace(/[^a-zA-Z0-9._-]/g,'');
+  } catch {}
+  return raw.trim().replace(/[^a-zA-Z0-9._-]/g,'');
+}
+
+async function addGroup() {
+  const inp = document.getElementById('groupInp');
+  const raw = inp.value.trim();
+  if (!raw) return;
+  inp.value=''; inp.disabled=true;
+  const slug = extractSlug(raw);
+  const st = document.getElementById('toolStatus');
+  const prev = st.dataset.base || st.textContent;
+  st.textContent = `🔍 Đang tìm "${slug}"...`;
+  try {
+    const r = await fetch('/api/groups/resolve?slug=' + encodeURIComponent(slug));
+    const d = await r.json();
+    if (d.ok) {
+      if (d.name) groupNames[d.id] = d.name;
+      // Save to server
+      await fetch('/api/groups', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ id: d.id, name: d.name || '' })
+      });
+      if (!groups.includes(d.id)) groups.push(d.id);
+      renderGroupChips();
+      st.textContent = `✅ Đã thêm: ${d.name||d.id}`;
+    } else {
+      st.textContent = `❌ Không tìm được: ${d.error}`;
+    }
+  } catch { st.textContent='❌ Lỗi kết nối'; }
+  setTimeout(()=>{ st.textContent=prev; },4000);
+  inp.disabled=false;
+}
+
+async function removeGroup(gid) {
+  if (groups.length<=1) return;
+  await fetch(`/api/groups/${gid}`, { method: 'DELETE' });
+  groups = groups.filter(g => g !== gid);
+  renderGroupChips();
+}
+
+document.getElementById('groupInp').addEventListener('keydown', e => { if(e.key==='Enter') addGroup(); });
+
+// ── Telegram ───────────────────────────────────────────
+function renderTgChips() {
+  document.getElementById('tgChips').innerHTML = tgIds.map(cid =>
+    `<div class="chip chip-tg">
+      <span class="chip-text">${cid}</span>
+      <span class="chip-action" onclick="testTg('${cid}')">Test</span>
+      <span class="chip-remove" onclick="removeTg('${cid}')">✕</span>
+    </div>`
+  ).join('');
+}
+async function loadTg() {
+  try { const r=await fetch('/api/telegram/chatids'); tgIds=await r.json(); renderTgChips(); } catch {}
+}
+async function addTg() {
+  const inp=document.getElementById('tgInp');
+  const cid=inp.value.trim().replace(/[^0-9-]/g,'');
+  if(!cid) return; inp.value='';
+  const r=await fetch('/api/telegram/chatids',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:cid})});
+  const d=await r.json();
+  if(d.ok){tgIds=d.chat_ids; renderTgChips();}
+}
+async function removeTg(cid) {
+  const r=await fetch(`/api/telegram/chatids/${cid}`,{method:'DELETE'});
+  const d=await r.json(); tgIds=d.chat_ids; renderTgChips();
+}
+async function testTg(cid) {
+  const st=document.getElementById('tgStatus');
+  st.textContent='⏳ Đang gửi...';
+  try {
+    const r=await fetch(`/api/telegram/test/${cid}`,{method:'POST'});
+    const d=await r.json();
+    st.textContent=d.ok?'✅ Gửi thành công!':'❌ '+(d.error||'Lỗi');
+  } catch { st.textContent='❌ Lỗi kết nối'; }
+  setTimeout(()=>{st.textContent='';},3000);
+}
+document.getElementById('tgInp').addEventListener('keydown', e => { if(e.key==='Enter') addTg(); });
+
+// ── Post modal ─────────────────────────────────────────
+function openPostModal() {
+  document.getElementById('postGroupSel').innerHTML =
+    groups.map(g=>`<option value="${g}">${esc(groupNames[g]||g)}</option>`).join('');
+  document.getElementById('postIdSel').innerHTML =
+    '<option value="">👤 Cá nhân</option>' +
+    pages.map(p=>`<option value="${p.id}">📄 ${esc(p.name)}</option>`).join('');
+  document.getElementById('postResult').textContent='';
+  document.getElementById('postContent').value='';
+  document.getElementById('postModal').classList.add('open');
+  setTimeout(()=>document.getElementById('postContent').focus(),80);
+}
+function closePostModal() { document.getElementById('postModal').classList.remove('open'); }
+async function submitPost() {
+  const group_id=document.getElementById('postGroupSel').value;
+  const page_id=document.getElementById('postIdSel').value;
+  const message=document.getElementById('postContent').value.trim();
+  const res=document.getElementById('postResult');
+  const btn=document.getElementById('btnPost');
+  if(!message) return;
+  btn.disabled=true; res.style.color='#65676b'; res.textContent='⏳ Đang đăng...';
+  try {
+    const r=await fetch('/api/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id,page_id,message})});
+    const d=await r.json();
+    if(d.ok){ res.style.color='#1a7f37'; res.textContent='✅ Đăng thành công!'; document.getElementById('postContent').value=''; setTimeout(closePostModal,1800); }
+    else { res.style.color='#e41e3f'; res.textContent='❌ '+(d.error||'Lỗi'); }
+  } catch { res.style.color='#e41e3f'; res.textContent='❌ Lỗi kết nối'; }
+  btn.disabled=false;
+}
+
+// ── Init ───────────────────────────────────────────────
+(async function init() {
+  // Load settings trước để áp dụng interval
+  try {
+    const sr = await fetch('/api/settings');
+    const s  = await sr.json();
+    document.getElementById('intervalInp').value = s.interval || 5;
+    // lưu lại để dùng sau khi loadPosts xong
+    window._autoOnInit = !!s.auto_refresh;
+  } catch { window._autoOnInit = true; }
+
+  await loadGroups();
+  await Promise.all(groups.map(loadGroupName));
+  await Promise.all(groups.map(g =>
+    fetch('/api/groups', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ id: g, name: groupNames[g] || '' })
+    })
+  ));
+  renderGroupChips();
+  renderKwChips();
+  loadTg();
+  loadPages();
+  await loadPosts();
+  if (window._autoOnInit) startAuto();
+})();
 </script>
 </body>
 </html>
