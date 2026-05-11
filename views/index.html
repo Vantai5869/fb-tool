@@ -230,6 +230,44 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .join-prompt-close { cursor: pointer; font-size: 18px; color: #999; line-height: 1; flex-shrink: 0; }
 .join-prompt-close:hover { color: #555; }
 .join-msg { font-size: 13px; margin-top: 6px; }
+
+/* ── AI Panel ── */
+.ai-panel { background: white; border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 6px rgba(0,0,0,.08); margin-bottom: 10px; }
+.ai-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ai-row + .ai-row { margin-top: 8px; }
+.ai-row select { padding: 6px 10px; border-radius: 10px; border: 1.5px solid #e4e6eb; font-size: 13px; background: white; outline: none; cursor: pointer; }
+.ai-row select:focus { border-color: #8b5cf6; }
+.ai-key-input { flex: 1; min-width: 120px; padding: 6px 11px; border-radius: 10px; border: 1.5px solid #e4e6eb; font-size: 13px; outline: none; font-family: monospace; }
+.ai-key-input:focus { border-color: #8b5cf6; }
+.btn-ai-sm { padding: 5px 12px; border-radius: 10px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all .15s; }
+.btn-ai-save { background: #8b5cf6; color: white; }
+.btn-ai-save:hover { background: #7c3aed; }
+.btn-ai-test { background: #e0e7ff; color: #4338ca; }
+.btn-ai-test:hover { background: #c7d2fe; }
+.btn-ai-del { background: #fee2e2; color: #dc2626; }
+.btn-ai-del:hover { background: #fecaca; }
+.ai-status { font-size: 12px; color: #65676b; }
+.ai-auto-label { font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; color: #65676b; }
+.ai-auto-label input { accent-color: #8b5cf6; }
+.ai-key-display { font-size: 12px; font-family: monospace; color: #65676b; background: #f3f4f6; padding: 4px 10px; border-radius: 8px; letter-spacing: 1px; }
+
+/* ── Category badge ── */
+.badge-cat { cursor: default; }
+.btn-classify { background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: white; }
+.btn-classify:hover { opacity: .9; }
+.btn-classify:disabled { opacity: .5; cursor: not-allowed; }
+.cat-filter { padding: 7px 10px; border-radius: 20px; border: 1.5px solid #e4e6eb; font-size: 13px; background: white; outline: none; cursor: pointer; }
+.cat-filter:focus { border-color: #8b5cf6; }
+
+/* ── Multi-select groups ── */
+.multi-group-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; border: 1.5px solid #e4e6eb; border-radius: 10px; padding: 8px 10px; }
+.multi-group-item { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; cursor: pointer; font-size: 13px; transition: background .1s; }
+.multi-group-item:hover { background: #f5f6f8; }
+.multi-group-item input { accent-color: #1877f2; flex-shrink: 0; }
+.multi-group-item label { cursor: pointer; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.multi-select-actions { display: flex; gap: 8px; margin-top: 6px; }
+.multi-select-actions a { font-size: 12px; color: #1877f2; cursor: pointer; text-decoration: none; }
+.multi-select-actions a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -257,6 +295,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     </select>
     <button class="btn btn-primary" onclick="loadPosts()"><span id="refIcon">🔄</span> Tải lại</button>
     <button class="btn btn-success" onclick="openPostModal()">✍️ Đăng bài</button>
+    <button class="btn btn-classify" id="btnClassify" onclick="classifyAll()">🤖 Phân loại</button>
+    <select class="cat-filter" id="catFilter" onchange="applyFilter()">
+      <option value="">🏷️ Tất cả</option>
+    </select>
     <div class="interval-wrap">
       <button class="btn btn-auto" id="btnAuto" onclick="toggleAuto()">⏱ Tự động</button>
       <input type="number" id="intervalInp" value="5" min="1" max="60">
@@ -302,6 +344,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <div style="font-size:12px;color:#65676b;width:100%" id="tgStatus"></div>
   </div>
 
+  <!-- AI Panel -->
+  <div class="ai-panel">
+    <div class="ai-row">
+      <div class="panel-label">🤖 AI</div>
+      <select id="aiProvider" onchange="onProviderChange()">
+        <option value="gemini">Google Gemini</option>
+        <option value="openai">OpenAI</option>
+        <option value="claude">Claude</option>
+      </select>
+      <div style="flex:1"></div>
+      <button class="btn-ai-sm btn-ai-test" onclick="testAi()">🔌 Test</button>
+      <label class="ai-auto-label"><input type="checkbox" id="aiAutoClassify" onchange="saveAiConfig()"> Tự động</label>
+      <span class="ai-status" id="aiStatus"></span>
+    </div>
+    <div class="ai-row">
+      <span style="font-size:12px;color:#65676b;white-space:nowrap">API Key:</span>
+      <span class="ai-key-display" id="aiKeyDisplay">Chưa có</span>
+      <input type="text" class="ai-key-input" id="aiKeyInput" placeholder="Nhập API Key mới..." style="display:none">
+      <button class="btn-ai-sm btn-ai-save" id="aiKeySaveBtn" onclick="saveAiKey()" style="display:none">💾 Lưu</button>
+      <button class="btn-ai-sm btn-ai-del" id="aiKeyDelBtn" onclick="deleteAiKey()" style="display:none">🗑️ Xoá</button>
+      <button class="btn-ai-sm btn-ai-test" id="aiKeyEditBtn" onclick="showKeyInput()">✏️ Đổi key</button>
+    </div>
+  </div>
+
   <!-- Feed -->
   <div class="feed" id="feed">
     <div class="skeleton">
@@ -322,7 +388,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="modal-overlay" id="postModal" onclick="if(event.target===this)closePostModal()">
   <div class="modal">
     <div class="modal-hd">✍️ Đăng bài mới <span class="modal-close" onclick="closePostModal()">✕</span></div>
-    <div class="field"><label>Nhóm</label><select id="postGroupSel"></select></div>
+    <div class="field">
+      <label>Nhóm <span style="font-size:11px;color:#65676b;font-weight:400">(chọn nhiều nhóm)</span></label>
+      <div class="multi-group-list" id="postGroupList"></div>
+      <div class="multi-select-actions">
+        <a onclick="postSelectAll(true)">Chọn tất cả</a>
+        <a onclick="postSelectAll(false)">Bỏ chọn</a>
+      </div>
+    </div>
     <div class="field"><label>Đăng với tư cách</label><select id="postIdSel"><option value="">👤 Cá nhân</option></select></div>
     <div class="field"><label>Nội dung</label><textarea id="postContent" placeholder="Bạn đang nghĩ gì?"></textarea></div>
     <div class="modal-result" id="postResult"></div>
@@ -423,6 +496,11 @@ function renderPost(post) {
     ? `<span class="meta-dot"></span><span class="badge badge-group" title="${esc(gName)}\nID: ${gid}">📋 ${esc(gName)}</span>`
     : '';
 
+  const cat = classifications[post.id] || '';
+  const catBadge = cat
+    ? `<span class="meta-dot"></span><span class="badge badge-cat" style="background:${catBg(cat)};color:${catFg(cat)}">🏷️ ${esc(cat)}</span>`
+    : '';
+
   return `<div class="card">
   <div class="card-header">
     <div class="avatar" style="background:${avatarColor(authorName)}">${initials(authorName)}</div>
@@ -433,6 +511,7 @@ function renderPost(post) {
         <span class="meta-dot"></span>
         ${statusBadge}
         ${groupBadge}
+        ${catBadge}
       </div>
     </div>
   </div>
@@ -553,10 +632,15 @@ document.getElementById('kwInp').addEventListener('keydown', e => { if(e.key==='
 // ── Apply filter ───────────────────────────────────────
 function applyFilter() {
   const feed = document.getElementById('feed');
-  const filtered = allPosts.filter(matchKw);
+  const catVal = document.getElementById('catFilter').value;
+  const filtered = allPosts.filter(p => {
+    if (!matchKw(p)) return false;
+    if (catVal && classifications[p.id] !== catVal) return false;
+    return true;
+  });
   if (!filtered.length) {
-    feed.innerHTML = keywords.length
-      ? `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Không có bài khớp từ khoá</div></div>`
+    feed.innerHTML = (keywords.length || catVal)
+      ? `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Không có bài khớp bộ lọc</div></div>`
       : `<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Không có bài viết nào</div></div>`;
     return;
   }
@@ -715,12 +799,19 @@ async function addGroup() {
         });
         if (!groups.includes(d.id)) groups.push(d.id);
         renderGroupChips();
-        st.textContent = `✅ Đã thêm: ${d.name||d.id}`;
-        setTimeout(()=>{ st.textContent=prev; },3000);
+        st.innerHTML = `✅ Đã thêm: ${esc(d.name||d.id)} <a href="https://www.facebook.com/groups/${d.id}" target="_blank" style="color:#1877f2;text-decoration:none">🔗 Mở FB</a>`;
+        setTimeout(()=>{ st.textContent=prev; },5000);
       }
     } else {
-      st.textContent = `❌ Không tìm được: ${d.error}`;
-      setTimeout(()=>{ st.textContent=prev; },4000);
+      // Group not found via API — might be a private group
+      // Try to show join prompt anyway if slug looks like a valid ID
+      if (slug.match(/^\d{10,}$/)) {
+        st.textContent = prev;
+        showJoinPrompt(slug, slug);
+      } else {
+        st.textContent = `❌ Không tìm được: ${d.error}`;
+        setTimeout(()=>{ st.textContent=prev; },4000);
+      }
     }
   } catch {
     st.textContent='❌ Lỗi kết nối';
@@ -734,16 +825,28 @@ function showJoinPrompt(gid, gname) {
     <div class="join-prompt" id="joinPrompt-${gid}">
       <div class="join-prompt-icon">⚠️</div>
       <div class="join-prompt-body">
-        <div class="join-prompt-title">Bạn chưa là thành viên của nhóm "${gname}"</div>
+        <div class="join-prompt-title">Bạn chưa là thành viên của nhóm "${esc(gname)}"</div>
         <div class="join-prompt-sub">Cần tham gia nhóm trước thì mới theo dõi được bài viết.</div>
         <div class="join-prompt-actions">
           <button class="btn-join" id="btnJoin-${gid}" onclick="joinGroup('${gid}','${esc(gname)}')">🚀 Gửi yêu cầu tham gia</button>
           <a class="btn-join-fb" href="https://www.facebook.com/groups/${gid}" target="_blank">🔗 Mở trên Facebook</a>
+          <button class="btn-join-fb" onclick="forceAddGroup('${gid}','${esc(gname)}')">📋 Thêm theo dõi</button>
         </div>
         <div class="join-msg" id="joinMsg-${gid}"></div>
       </div>
       <span class="join-prompt-close" onclick="document.getElementById('joinPromptWrap').innerHTML=''">✕</span>
     </div>`;
+}
+
+async function forceAddGroup(gid, gname) {
+  await fetch('/api/groups', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ id: gid, name: gname })
+  });
+  if (!groups.includes(gid)) groups.push(gid);
+  groupNames[gid] = gname;
+  renderGroupChips();
+  document.getElementById('joinPromptWrap').innerHTML = '';
 }
 
 async function joinGroup(gid, gname) {
@@ -831,8 +934,11 @@ document.getElementById('tgInp').addEventListener('keydown', e => { if(e.key==='
 
 // ── Post modal ─────────────────────────────────────────
 function openPostModal() {
-  document.getElementById('postGroupSel').innerHTML =
-    groups.map(g=>`<option value="${g}">${esc(groupNames[g]||g)}</option>`).join('');
+  document.getElementById('postGroupList').innerHTML =
+    groups.map(g => `<div class="multi-group-item">
+      <input type="checkbox" id="pg-${g}" value="${g}" checked>
+      <label for="pg-${g}">${esc(groupNames[g]||g)}</label>
+    </div>`).join('');
   document.getElementById('postIdSel').innerHTML =
     '<option value="">👤 Cá nhân</option>' +
     pages.map(p=>`<option value="${p.id}">📄 ${esc(p.name)}</option>`).join('');
@@ -842,34 +948,235 @@ function openPostModal() {
   setTimeout(()=>document.getElementById('postContent').focus(),80);
 }
 function closePostModal() { document.getElementById('postModal').classList.remove('open'); }
+
+function postSelectAll(checked) {
+  document.querySelectorAll('#postGroupList input[type=checkbox]').forEach(cb => cb.checked = checked);
+}
+
+function getSelectedGroups() {
+  return [...document.querySelectorAll('#postGroupList input[type=checkbox]:checked')].map(cb => cb.value);
+}
+
 async function submitPost() {
-  const group_id=document.getElementById('postGroupSel').value;
-  const page_id=document.getElementById('postIdSel').value;
-  const message=document.getElementById('postContent').value.trim();
-  const res=document.getElementById('postResult');
-  const btn=document.getElementById('btnPost');
-  if(!message) return;
-  btn.disabled=true; res.style.color='#65676b'; res.textContent='⏳ Đang đăng...';
+  const selectedGroups = getSelectedGroups();
+  const page_id = document.getElementById('postIdSel').value;
+  const message = document.getElementById('postContent').value.trim();
+  const res = document.getElementById('postResult');
+  const btn = document.getElementById('btnPost');
+  if (!message) return;
+  if (!selectedGroups.length) { res.style.color='#e41e3f'; res.textContent='❌ Chọn ít nhất 1 nhóm'; return; }
+
+  btn.disabled = true;
+  const total = selectedGroups.length;
+  let ok = 0, fail = 0;
+  res.style.color = '#65676b';
+  res.textContent = `⏳ Đang đăng vào ${total} nhóm...`;
+
+  for (const group_id of selectedGroups) {
+    try {
+      const r = await fetch('/api/post', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ group_id, page_id, message })
+      });
+      const d = await r.json();
+      if (d.ok) ok++; else fail++;
+    } catch { fail++; }
+    res.textContent = `⏳ Đã đăng ${ok + fail}/${total} (✅${ok} ❌${fail})`;
+  }
+
+  if (fail === 0) {
+    res.style.color = '#1a7f37';
+    res.textContent = `✅ Đăng thành công ${ok}/${total} nhóm!`;
+    document.getElementById('postContent').value = '';
+    setTimeout(closePostModal, 2000);
+  } else {
+    res.style.color = ok > 0 ? '#b45309' : '#e41e3f';
+    res.textContent = `✅ ${ok} thành công, ❌ ${fail} thất bại`;
+  }
+  btn.disabled = false;
+}
+
+// ── AI Classification ──────────────────────────────────
+let classifications = {};
+let aiConfig = {};
+let aiProviders = {};
+
+const CAT_COLORS = {
+  'Mua bán':           { bg: '#dcfce7', fg: '#166534' },
+  'Hỏi đáp':           { bg: '#dbeafe', fg: '#1e40af' },
+  'Thông báo':         { bg: '#f3e8ff', fg: '#6b21a8' },
+  'Tán gẫu':           { bg: '#ccfbf1', fg: '#115e59' },
+  'Spam/Quảng cáo':    { bg: '#fee2e2', fg: '#991b1b' },
+  'Tuyển dụng':        { bg: '#ffedd5', fg: '#9a3412' },
+  'Chia sẻ kiến thức': { bg: '#e0e7ff', fg: '#3730a3' },
+};
+function catBg(cat) { return (CAT_COLORS[cat] || { bg: '#f3f4f6' }).bg; }
+function catFg(cat) { return (CAT_COLORS[cat] || { fg: '#374151' }).fg; }
+
+async function loadAiConfig() {
   try {
-    const r=await fetch('/api/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id,page_id,message})});
-    const d=await r.json();
-    if(d.ok){ res.style.color='#1a7f37'; res.textContent='✅ Đăng thành công!'; document.getElementById('postContent').value=''; setTimeout(closePostModal,1800); }
-    else { res.style.color='#e41e3f'; res.textContent='❌ '+(d.error||'Lỗi'); }
-  } catch { res.style.color='#e41e3f'; res.textContent='❌ Lỗi kết nối'; }
-  btn.disabled=false;
+    const [pRes, cRes, clRes] = await Promise.all([
+      fetch('/api/ai/providers'),
+      fetch('/api/ai/config'),
+      fetch('/api/ai/classifications'),
+    ]);
+    aiProviders = await pRes.json();
+    aiConfig = await cRes.json();
+    classifications = await clRes.json();
+    document.getElementById('aiProvider').value = aiConfig.provider || 'gemini';
+    document.getElementById('aiAutoClassify').checked = !!aiConfig.auto_classify;
+    renderKeyDisplay();
+    updateCatFilter();
+  } catch {}
+}
+
+function renderKeyDisplay() {
+  const provider = document.getElementById('aiProvider').value;
+  const masked = (aiConfig.keys_masked || {})[provider] || '';
+  const hasKey = masked && masked !== '***' && masked.length > 3;
+  const display = document.getElementById('aiKeyDisplay');
+  const delBtn = document.getElementById('aiKeyDelBtn');
+  const editBtn = document.getElementById('aiKeyEditBtn');
+  const input = document.getElementById('aiKeyInput');
+  const saveBtn = document.getElementById('aiKeySaveBtn');
+
+  if (hasKey) {
+    display.textContent = masked;
+    display.style.display = '';
+    delBtn.style.display = '';
+    editBtn.textContent = '✏️ Đổi key';
+  } else {
+    display.textContent = 'Chưa có key';
+    display.style.display = '';
+    delBtn.style.display = 'none';
+    editBtn.textContent = '➕ Thêm key';
+  }
+  input.style.display = 'none';
+  saveBtn.style.display = 'none';
+  input.value = '';
+}
+
+function showKeyInput() {
+  document.getElementById('aiKeyInput').style.display = '';
+  document.getElementById('aiKeySaveBtn').style.display = '';
+  document.getElementById('aiKeyInput').focus();
+}
+
+function onProviderChange() {
+  const provider = document.getElementById('aiProvider').value;
+  renderKeyDisplay();
+  document.getElementById('aiStatus').textContent = '';
+  // Save provider selection
+  fetch('/api/ai/config', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ provider, model: (aiProviders[provider] || {}).default_model || '' })
+  });
+}
+
+async function saveAiKey() {
+  const provider = document.getElementById('aiProvider').value;
+  const key = document.getElementById('aiKeyInput').value.trim();
+  const st = document.getElementById('aiStatus');
+  if (!key) { st.textContent = '❌ Nhập API key'; st.style.color = '#dc2626'; return; }
+  st.textContent = '⏳ Đang lưu...'; st.style.color = '#65676b';
+  try {
+    const model = (aiProviders[provider] || {}).default_model || '';
+    const r = await fetch('/api/ai/config', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ provider, model, key })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      st.textContent = '✅ Đã lưu key!'; st.style.color = '#16a34a';
+      // Refresh config to get masked key
+      const cRes = await fetch('/api/ai/config');
+      aiConfig = await cRes.json();
+      renderKeyDisplay();
+    } else {
+      st.textContent = '❌ Lỗi lưu'; st.style.color = '#dc2626';
+    }
+  } catch { st.textContent = '❌ Lỗi kết nối'; st.style.color = '#dc2626'; }
+  setTimeout(() => { st.textContent = ''; }, 3000);
+}
+
+async function deleteAiKey() {
+  const provider = document.getElementById('aiProvider').value;
+  const st = document.getElementById('aiStatus');
+  if (!confirm(`Xoá API key của ${provider.toUpperCase()}?`)) return;
+  try {
+    await fetch(`/api/ai/key/${provider}`, { method: 'DELETE' });
+    st.textContent = '✅ Đã xoá key'; st.style.color = '#16a34a';
+    const cRes = await fetch('/api/ai/config');
+    aiConfig = await cRes.json();
+    renderKeyDisplay();
+  } catch { st.textContent = '❌ Lỗi'; st.style.color = '#dc2626'; }
+  setTimeout(() => { st.textContent = ''; }, 3000);
+}
+
+async function saveAiConfig() {
+  const provider = document.getElementById('aiProvider').value;
+  const auto_classify = document.getElementById('aiAutoClassify').checked;
+  await fetch('/api/ai/config', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ provider, auto_classify })
+  });
+}
+
+async function testAi() {
+  const st = document.getElementById('aiStatus');
+  st.textContent = '⏳ Đang test...'; st.style.color = '#65676b';
+  try {
+    const r = await fetch('/api/ai/test', { method: 'POST' });
+    const d = await r.json();
+    st.textContent = d.ok ? '✅ Kết nối OK!' : '❌ ' + (d.error || 'Lỗi');
+    st.style.color = d.ok ? '#16a34a' : '#dc2626';
+  } catch { st.textContent = '❌ Lỗi kết nối'; st.style.color = '#dc2626'; }
+  setTimeout(() => { st.textContent = ''; }, 4000);
+}
+
+async function classifyAll() {
+  if (!allPosts.length) return;
+  const btn = document.getElementById('btnClassify');
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang phân loại...';
+  try {
+    const r = await fetch('/api/ai/classify', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ posts: allPosts })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      Object.assign(classifications, d.classifications);
+      updateCatFilter();
+      applyFilter();
+    } else {
+      alert('Lỗi: ' + (d.error || 'Không xác định'));
+    }
+  } catch { alert('Lỗi kết nối server'); }
+  btn.disabled = false;
+  btn.textContent = prev;
+}
+
+function updateCatFilter() {
+  const sel = document.getElementById('catFilter');
+  const cur = sel.value;
+  const cats = [...new Set(Object.values(classifications))].sort();
+  sel.innerHTML = '<option value="">🏷️ Tất cả</option>' +
+    cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  sel.value = cur;
 }
 
 // ── Init ───────────────────────────────────────────────
 (async function init() {
-  // Load settings trước để áp dụng interval
   try {
     const sr = await fetch('/api/settings');
     const s  = await sr.json();
     document.getElementById('intervalInp').value = s.interval || 5;
-    // lưu lại để dùng sau khi loadPosts xong
     window._autoOnInit = !!s.auto_refresh;
   } catch { window._autoOnInit = true; }
 
+  await loadAiConfig();
   await loadGroups();
   await Promise.all(groups.map(loadGroupName));
   await Promise.all(groups.map(g =>
@@ -883,6 +1190,7 @@ async function submitPost() {
   loadTg();
   loadPages();
   await loadPosts();
+  if (aiConfig.auto_classify) classifyAll();
   if (window._autoOnInit) startAuto();
 })();
 </script>

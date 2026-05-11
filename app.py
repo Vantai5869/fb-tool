@@ -5,6 +5,7 @@ import requests as _req
 from flask import Flask, jsonify, render_template, request
 
 from core.group_api import FacebookGroupAPI, load_token, load_cookie, refresh_token
+from core.ai_classifier import AIClassifier, DEFAULT_MODEL, DEFAULT_API_KEY, DEFAULT_CATEGORIES, PROVIDERS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
@@ -13,6 +14,8 @@ SEEN_FILE = os.path.join(DATA_DIR, 'seen_posts.json')
 TG_CONFIG_FILE = os.path.join(DATA_DIR, 'telegram_config.json')
 GROUPS_FILE = os.path.join(DATA_DIR, 'groups.json')
 SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
+AI_CONFIG_FILE = os.path.join(DATA_DIR, 'ai_config.json')
+CLASSIFICATIONS_FILE = os.path.join(DATA_DIR, 'classifications.json')
 
 BOT_TOKEN = os.environ.get('TG_BOT_TOKEN', '8724375632:AAEgyz4yRPivDYWGXesTaJHhdqWYIraSoT8')
 DEFAULT_GROUP = os.environ.get('DEFAULT_GROUP', '3809441172650624')
@@ -27,10 +30,12 @@ _tg_chat_ids: list = []
 _pages_cache: dict = {}  # {page_id: {name, access_token}}
 _groups: list = []       # [{id, name}]
 _settings: dict = {}    # {auto_refresh, interval}
+_ai_config: dict = {}   # {provider, model, keys, auto_classify, categories}
+_classifications: dict = {}  # {post_id: category}
 
 
 def _load_state():
-    global _seen_ids, _tg_chat_ids, _groups, _settings
+    global _seen_ids, _tg_chat_ids, _groups, _settings, _ai_config, _classifications
     os.makedirs(DATA_DIR, exist_ok=True)
     try:
         _seen_ids = set(json.load(open(SEEN_FILE)))
@@ -49,6 +54,20 @@ def _load_state():
         _settings = json.load(open(SETTINGS_FILE))
     except Exception:
         _settings = {'auto_refresh': True, 'interval': 5}
+    try:
+        _ai_config = json.load(open(AI_CONFIG_FILE))
+    except Exception:
+        _ai_config = {
+            'provider': 'gemini',
+            'model': DEFAULT_MODEL,
+            'keys': {'gemini': DEFAULT_API_KEY, 'openai': '', 'claude': ''},
+            'auto_classify': False,
+            'categories': DEFAULT_CATEGORIES,
+        }
+    try:
+        _classifications = json.load(open(CLASSIFICATIONS_FILE))
+    except Exception:
+        _classifications = {}
 
 
 def _save_seen():
@@ -69,6 +88,25 @@ def _save_groups():
 def _save_settings():
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(_settings, f)
+
+
+def _save_ai_config():
+    with open(AI_CONFIG_FILE, 'w') as f:
+        json.dump(_ai_config, f, ensure_ascii=False)
+
+
+def _save_classifications():
+    with open(CLASSIFICATIONS_FILE, 'w') as f:
+        json.dump(_classifications, f, ensure_ascii=False)
+
+
+def _get_classifier() -> AIClassifier:
+    provider = _ai_config.get('provider', 'gemini')
+    default_model = PROVIDERS.get(provider, {}).get('default_model', DEFAULT_MODEL)
+    model = _ai_config.get('model', default_model) or default_model
+    api_key = _ai_config.get('keys', {}).get(provider, '') or (DEFAULT_API_KEY if provider == 'gemini' else '')
+    categories = _ai_config.get('categories', DEFAULT_CATEGORIES)
+    return AIClassifier(provider, model, api_key, categories)
 
 
 def get_api(group_id: str) -> FacebookGroupAPI:
@@ -328,6 +366,87 @@ def tg_test(chat_id):
         return jsonify({'ok': r.ok})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ── AI Routes ──────────────────────────────────────────
+@app.route('/api/ai/providers')
+def ai_providers():
+    return jsonify(PROVIDERS)
+
+
+@app.route('/api/ai/config', methods=['GET'])
+def ai_config_get():
+    safe = dict(_ai_config)
+    safe_keys = {}
+    for k, v in safe.get('keys', {}).items():
+        safe_keys[k] = ('***' + v[-4:]) if v and len(v) > 4 else ('***' if v else '')
+    safe['keys_masked'] = safe_keys
+    return jsonify(safe)
+
+
+@app.route('/api/ai/config', methods=['POST'])
+def ai_config_save():
+    global _ai_config
+    body = request.get_json() or {}
+    if 'provider' in body:
+        _ai_config['provider'] = body['provider']
+    if 'model' in body:
+        _ai_config['model'] = body['model']
+    if 'auto_classify' in body:
+        _ai_config['auto_classify'] = bool(body['auto_classify'])
+    if 'categories' in body and isinstance(body['categories'], list):
+        _ai_config['categories'] = body['categories']
+    if 'key' in body:
+        provider = body.get('provider', _ai_config.get('provider', 'gemini'))
+        if 'keys' not in _ai_config:
+            _ai_config['keys'] = {}
+        _ai_config['keys'][provider] = body['key']
+    _save_ai_config()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ai/test', methods=['POST'])
+def ai_test():
+    classifier = _get_classifier()
+    if not classifier.api_key:
+        return jsonify({'ok': False, 'error': 'Chưa nhập API key'})
+    result = classifier.test_connection()
+    return jsonify(result)
+
+
+@app.route('/api/ai/key/<provider>', methods=['DELETE'])
+def ai_key_delete(provider):
+    global _ai_config
+    if 'keys' in _ai_config and provider in _ai_config['keys']:
+        _ai_config['keys'][provider] = ''
+        _save_ai_config()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ai/classify', methods=['POST'])
+def ai_classify():
+    global _classifications
+    body = request.get_json() or {}
+    posts = body.get('posts', [])
+    force = body.get('force', False)
+    if not posts:
+        return jsonify({'ok': False, 'error': 'Không có bài viết'})
+    classifier = _get_classifier()
+    if not classifier.api_key:
+        return jsonify({'ok': False, 'error': 'Chưa cấu hình API key'})
+    to_classify = [p for p in posts if force or p.get('id') not in _classifications]
+    if not to_classify:
+        return jsonify({'ok': True, 'classifications': {pid: _classifications[pid] for pid in [p['id'] for p in posts] if pid in _classifications}})
+    results = classifier.classify_posts(to_classify)
+    _classifications.update(results)
+    _save_classifications()
+    all_results = {p['id']: _classifications.get(p['id'], '') for p in posts}
+    return jsonify({'ok': True, 'classifications': all_results})
+
+
+@app.route('/api/ai/classifications', methods=['GET'])
+def ai_classifications_get():
+    return jsonify(_classifications)
 
 
 # ── Start ──────────────────────────────────────────────

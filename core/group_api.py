@@ -94,8 +94,49 @@ class FacebookGroupAPI:
         return _scrape_group_id(slug)
 
     def check_membership(self, group_id: str) -> bool:
-        data = self._call('get', f'{GRAPH_URL}/{group_id}/feed', params={'fields': 'id', 'limit': 1})
-        return data is not None and 'error' not in data
+        """Check if current user is a member of the group."""
+        # Try to get /member endpoint which requires membership
+        data = self._call('get', f'{GRAPH_URL}/{group_id}', params={'fields': 'id,name'})
+        if data is None or 'error' in data:
+            return False
+        # Also try feed access — if feed returns error, not a member
+        feed = self._call('get', f'{GRAPH_URL}/{group_id}/feed', params={'fields': 'id', 'limit': 1})
+        if feed is None or 'error' in feed:
+            return False
+        # For public groups, feed is accessible even without membership
+        # Use cookie-based check as fallback
+        return self._cookie_check_membership(group_id)
+
+    def _cookie_check_membership(self, group_id: str) -> bool:
+        """Check membership via mbasic.facebook.com (cookie-based)."""
+        import re
+        cookie = load_cookie()
+        if not cookie:
+            return True  # Can't check, assume member
+        try:
+            resp = requests.get(
+                f'https://mbasic.facebook.com/groups/{group_id}',
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+                    'Accept': 'text/html',
+                    'Cookie': cookie,
+                },
+                timeout=15,
+                allow_redirects=True,
+            )
+            html = resp.text
+            # If redirected to login
+            if '/login' in resp.url or 'Đăng nhập' in html[:500]:
+                return True  # Can't determine, assume member
+            # Check for leave/member indicators
+            if re.search(r'leave_group|rời nhóm|Rời Nhóm|Đã tham gia', html, re.I):
+                return True
+            # Check for join button — means NOT a member
+            if re.search(r'join.*group|tham gia nhóm|Tham Gia Nhóm|/join/', html, re.I):
+                return False
+            return True  # Default assume member
+        except Exception:
+            return True
 
     def join_group(self, group_id: str) -> dict:
         import re
@@ -158,6 +199,16 @@ def _scrape_group_id(slug: str) -> Optional[dict]:
             allow_redirects=True,
         )
         html = resp.text
+        # Detect login redirect
+        if '/login' in resp.url or 'Đăng nhập' in html[:500] or '<title>Log in' in html[:500]:
+            return None
+        # Detect error pages
+        title_m = _re.search(r'<title>([^<]+)</title>', html)
+        if title_m:
+            title = title_m.group(1).strip()
+            # Skip if title is a login/error page
+            if any(k in title.lower() for k in ['đăng nhập', 'log in', 'login', 'error', 'not found']):
+                return None
         # Lấy số xuất hiện nhiều nhất trong khoảng 10-16 chữ số (độ dài ID group FB)
         candidates = _re.findall(r'\b(\d{10,16})\b', html)
         if not candidates:
@@ -165,8 +216,7 @@ def _scrape_group_id(slug: str) -> Optional[dict]:
         freq = Counter(candidates)
         gid = freq.most_common(1)[0][0]
         # Lấy tên group từ title
-        name_m = _re.search(r'<title>([^<]+)</title>', html)
-        name = name_m.group(1).replace('| Facebook', '').strip() if name_m else slug
+        name = title_m.group(1).replace('| Facebook', '').strip() if title_m else slug
         return {'id': gid, 'name': name}
     except Exception:
         pass
