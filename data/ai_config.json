@@ -1,1 +1,1 @@
-{"provider": "gemini", "model": "gemini-flash-latest", "keys": {"gemini": "AIzaSyAQs_5bzQ_rVidJybw7YzSEYsXXgB8inZ8", "openai": "", "claude": ""}, "auto_classify": false, "categories": ["Mua bán", "Hỏi đáp", "Thông báo", "Tán gẫu", "Spam/Quảng cáo", "Tuyển dụng", "Chia sẻ kiến thức"]}
+{"provider": "gemini", "model": "gemini-flash-latest", "keys": {"gemini": "AIzaSyCY4WYbgn-WqjOIO60BS-t40-rYiw5DyUY", "openai": "", "claude": ""}, "auto_classify": false, "categories": ["Mua bán", "Hỏi đáp", "Thông báo", "Tán gẫu", "Spam/Quảng cáo", "Tuyển dụng", "Chia sẻ kiến thức"]}

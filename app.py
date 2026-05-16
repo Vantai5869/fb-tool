@@ -16,6 +16,7 @@ GROUPS_FILE = os.path.join(DATA_DIR, 'groups.json')
 SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
 AI_CONFIG_FILE = os.path.join(DATA_DIR, 'ai_config.json')
 CLASSIFICATIONS_FILE = os.path.join(DATA_DIR, 'classifications.json')
+LEADS_FILE = os.path.join(DATA_DIR, 'leads.json')
 
 BOT_TOKEN = os.environ.get('TG_BOT_TOKEN', '8724375632:AAEgyz4yRPivDYWGXesTaJHhdqWYIraSoT8')
 DEFAULT_GROUP = os.environ.get('DEFAULT_GROUP', '3809441172650624')
@@ -32,10 +33,11 @@ _groups: list = []       # [{id, name}]
 _settings: dict = {}    # {auto_refresh, interval}
 _ai_config: dict = {}   # {provider, model, keys, auto_classify, categories}
 _classifications: dict = {}  # {post_id: category}
+_leads: dict = {}       # {post_id: [lead]}
 
 
 def _load_state():
-    global _seen_ids, _tg_chat_ids, _groups, _settings, _ai_config, _classifications
+    global _seen_ids, _tg_chat_ids, _groups, _settings, _ai_config, _classifications, _leads
     os.makedirs(DATA_DIR, exist_ok=True)
     try:
         _seen_ids = set(json.load(open(SEEN_FILE)))
@@ -60,7 +62,7 @@ def _load_state():
         _ai_config = {
             'provider': 'gemini',
             'model': DEFAULT_MODEL,
-            'keys': {'gemini': DEFAULT_API_KEY, 'openai': '', 'claude': ''},
+            'keys': {'gemini': '', 'openai': '', 'claude': ''},
             'auto_classify': False,
             'categories': DEFAULT_CATEGORIES,
         }
@@ -68,6 +70,10 @@ def _load_state():
         _classifications = json.load(open(CLASSIFICATIONS_FILE))
     except Exception:
         _classifications = {}
+    try:
+        _leads = json.load(open(LEADS_FILE))
+    except Exception:
+        _leads = {}
 
 
 def _save_seen():
@@ -100,11 +106,16 @@ def _save_classifications():
         json.dump(_classifications, f, ensure_ascii=False)
 
 
+def _save_leads():
+    with open(LEADS_FILE, 'w') as f:
+        json.dump(_leads, f, ensure_ascii=False)
+
+
 def _get_classifier() -> AIClassifier:
     provider = _ai_config.get('provider', 'gemini')
     default_model = PROVIDERS.get(provider, {}).get('default_model', DEFAULT_MODEL)
     model = _ai_config.get('model', default_model) or default_model
-    api_key = _ai_config.get('keys', {}).get(provider, '') or (DEFAULT_API_KEY if provider == 'gemini' else '')
+    api_key = _ai_config.get('keys', {}).get(provider, '') or DEFAULT_API_KEY
     categories = _ai_config.get('categories', DEFAULT_CATEGORIES)
     return AIClassifier(provider, model, api_key, categories)
 
@@ -380,6 +391,7 @@ def ai_config_get():
     safe_keys = {}
     for k, v in safe.get('keys', {}).items():
         safe_keys[k] = ('***' + v[-4:]) if v and len(v) > 4 else ('***' if v else '')
+    safe.pop('keys', None)
     safe['keys_masked'] = safe_keys
     return jsonify(safe)
 
@@ -438,6 +450,8 @@ def ai_classify():
     if not to_classify:
         return jsonify({'ok': True, 'classifications': {pid: _classifications[pid] for pid in [p['id'] for p in posts] if pid in _classifications}})
     results = classifier.classify_posts(to_classify)
+    if classifier.last_error and not results:
+        return jsonify({'ok': False, 'error': classifier.last_error}), 502
     _classifications.update(results)
     _save_classifications()
     all_results = {p['id']: _classifications.get(p['id'], '') for p in posts}
@@ -447,6 +461,41 @@ def ai_classify():
 @app.route('/api/ai/classifications', methods=['GET'])
 def ai_classifications_get():
     return jsonify(_classifications)
+
+
+@app.route('/api/ai/leads', methods=['GET'])
+def ai_leads_get():
+    return jsonify(_leads)
+
+
+@app.route('/api/ai/extract-leads', methods=['POST'])
+def ai_extract_leads():
+    global _leads
+    body = request.get_json() or {}
+    posts = body.get('posts', [])
+    force = body.get('force', False)
+    if not posts:
+        return jsonify({'ok': False, 'error': 'Không có bài viết'})
+    classifier = _get_classifier()
+    if not classifier.api_key:
+        return jsonify({'ok': False, 'error': 'Chưa cấu hình API key'})
+
+    to_extract = [p for p in posts if force or p.get('id') not in _leads]
+    if to_extract:
+        results = classifier.extract_leads(to_extract)
+        if classifier.last_error and not results:
+            return jsonify({'ok': False, 'error': classifier.last_error}), 502
+        for post in to_extract:
+            pid = post.get('id')
+            if pid:
+                _leads[pid] = results.get(pid, [])
+        _save_leads()
+
+    all_results = {p['id']: _leads.get(p['id'], []) for p in posts if p.get('id')}
+    payload = {'ok': True, 'leads': all_results}
+    if classifier.last_error:
+        payload['warning'] = classifier.last_error
+    return jsonify(payload)
 
 
 # ── Start ──────────────────────────────────────────────

@@ -62,7 +62,7 @@ class FacebookGroupAPI:
 
     def get_posts(self, limit: int = 10) -> Optional[List[Dict]]:
         data = self._call('get', f'{GRAPH_URL}/{self.group_id}/feed', params={
-            'fields': 'id,message,from,created_time,updated_time,is_hidden,permalink_url,attachments,comments.limit(5){message,from},reactions.limit(0).summary(true),shares',
+            'fields': 'id,message,from,created_time,updated_time,is_hidden,permalink_url,attachments,comments.limit(50).summary(true){id,message,from,created_time},reactions.limit(0).summary(true),shares',
             'limit': limit,
         })
         return data.get('data') if data else None

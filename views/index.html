@@ -253,11 +253,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 /* ── Category badge ── */
 .badge-cat { cursor: default; }
+.badge-lead { background: #ecfdf5; color: #047857; cursor: default; }
 .btn-classify { background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: white; }
 .btn-classify:hover { opacity: .9; }
 .btn-classify:disabled { opacity: .5; cursor: not-allowed; }
+.btn-leads { background: #047857; color: white; }
+.btn-leads:hover { opacity: .9; }
+.btn-leads:disabled { opacity: .5; cursor: not-allowed; }
 .cat-filter { padding: 7px 10px; border-radius: 20px; border: 1.5px solid #e4e6eb; font-size: 13px; background: white; outline: none; cursor: pointer; }
 .cat-filter:focus { border-color: #8b5cf6; }
+
+/* ── Leads ── */
+.lead-wrap { margin: 0 16px 12px; border: 1px solid #d1fae5; border-radius: 10px; overflow: hidden; background: #f8fffc; }
+.lead-head { padding: 8px 11px; background: #ecfdf5; color: #047857; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lead-list { display: flex; flex-direction: column; }
+.lead-item { padding: 9px 11px; border-top: 1px solid #d1fae5; }
+.lead-main { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 5px; }
+.lead-name { font-size: 13px; font-weight: 700; color: #064e3b; }
+.lead-source { font-size: 11px; color: #047857; background: #d1fae5; border-radius: 999px; padding: 1px 7px; }
+.lead-phone { font-size: 12px; font-weight: 700; color: #1d4ed8; background: #dbeafe; border-radius: 999px; padding: 1px 7px; }
+.lead-no-phone { font-size: 11px; color: #92400e; background: #fef3c7; border-radius: 999px; padding: 1px 7px; }
+.lead-need { font-size: 13px; line-height: 1.4; color: #1f2937; }
+.lead-sub { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: #6b7280; }
+.lead-evidence { margin-top: 5px; font-size: 12px; color: #4b5563; line-height: 1.35; }
 
 /* ── Multi-select groups ── */
 .multi-group-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; border: 1.5px solid #e4e6eb; border-radius: 10px; padding: 8px 10px; }
@@ -296,6 +314,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <button class="btn btn-primary" onclick="loadPosts()"><span id="refIcon">🔄</span> Tải lại</button>
     <button class="btn btn-success" onclick="openPostModal()">✍️ Đăng bài</button>
     <button class="btn btn-classify" id="btnClassify" onclick="classifyAll()">🤖 Phân loại</button>
+    <button class="btn btn-leads" id="btnLeads" onclick="extractLeadsAll()">🧲 Tách lead</button>
     <select class="cat-filter" id="catFilter" onchange="applyFilter()">
       <option value="">🏷️ Tất cả</option>
     </select>
@@ -430,6 +449,43 @@ function avatarColor(name) { let h=0; for(let c of name||'?') h=(h*31+c.charCode
 function openLightbox(src) { document.getElementById('lbImg').src=src; document.getElementById('lightbox').classList.add('open'); }
 function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
 
+function pct(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return Math.round(Math.max(0, Math.min(1, n)) * 100) + '%';
+}
+
+function renderLeadBlock(postId) {
+  const items = leads[postId] || [];
+  if (!items.length) return '';
+  const rows = items.map(lead => {
+    const source = lead.source === 'post' ? 'Bài viết' : 'Bình luận';
+    const phone = lead.phone
+      ? `<span class="lead-phone">☎ ${esc(lead.phone)}</span>`
+      : `<span class="lead-no-phone">Chưa có SĐT</span>`;
+    const product = lead.product_or_service ? `<span>${esc(lead.product_or_service)}</span>` : '';
+    const location = lead.location ? `<span>${esc(lead.location)}</span>` : '';
+    const budget = lead.budget ? `<span>${esc(lead.budget)}</span>` : '';
+    const conf = pct(lead.confidence);
+    const confidence = conf ? `<span>Độ chắc ${conf}</span>` : '';
+    const evidence = lead.evidence ? `<div class="lead-evidence">"${esc(lead.evidence)}"</div>` : '';
+    return `<div class="lead-item">
+      <div class="lead-main">
+        <span class="lead-name">${esc(lead.name || 'Ẩn danh')}</span>
+        <span class="lead-source">${source}</span>
+        ${phone}
+      </div>
+      <div class="lead-need">${esc(lead.need || '')}</div>
+      <div class="lead-sub">${[product, location, budget, confidence].filter(Boolean).join('')}</div>
+      ${evidence}
+    </div>`;
+  }).join('');
+  return `<div class="lead-wrap">
+    <div class="lead-head"><span>🧲 Nhu cầu phát hiện</span><span>${items.length}</span></div>
+    <div class="lead-list">${rows}</div>
+  </div>`;
+}
+
 // ── State ─────────────────────────────────────────────
 let groups     = [];      // string[]  — list of group IDs
 let groupNames = {};      // {id: name}
@@ -437,6 +493,7 @@ let keywords   = [];
 let tgIds      = [];
 let pages      = [];
 let allPosts   = [];
+let leads      = {};
 
 // ── Render post ────────────────────────────────────────
 function renderPost(post) {
@@ -451,6 +508,7 @@ function renderPost(post) {
   const pid        = (post.id.split('_')[1] || post.id);
   const gid        = post['_group_id'] || '';
   const gName      = (gid && groupNames[gid]) ? groupNames[gid] : gid;
+  const postLeads  = leads[post.id] || [];
 
   // Attachments
   const atts = (post.attachments || {}).data || [];
@@ -500,6 +558,10 @@ function renderPost(post) {
   const catBadge = cat
     ? `<span class="meta-dot"></span><span class="badge badge-cat" style="background:${catBg(cat)};color:${catFg(cat)}">🏷️ ${esc(cat)}</span>`
     : '';
+  const leadBadge = postLeads.length
+    ? `<span class="meta-dot"></span><span class="badge badge-lead">🧲 ${postLeads.length} lead</span>`
+    : '';
+  const leadHtml = renderLeadBlock(post.id);
 
   return `<div class="card">
   <div class="card-header">
@@ -512,6 +574,7 @@ function renderPost(post) {
         ${statusBadge}
         ${groupBadge}
         ${catBadge}
+        ${leadBadge}
       </div>
     </div>
   </div>
@@ -520,6 +583,7 @@ function renderPost(post) {
     ${long ? `<span class="see-more" onclick="expandTxt('pt-${pid}',this)">Xem thêm ▾</span>` : ''}
   </div>` : ''}
   ${attHtml ? `<div class="card-body" style="padding-top:0">${attHtml}</div>` : ''}
+  ${leadHtml}
   <div class="card-stats">
     <div class="stat"><span class="stat-icon">❤️</span> ${reactions}</div>
     <div class="stat"><span class="stat-icon">💬</span> ${cCount}</div>
@@ -1015,14 +1079,16 @@ function catFg(cat) { return (CAT_COLORS[cat] || { fg: '#374151' }).fg; }
 
 async function loadAiConfig() {
   try {
-    const [pRes, cRes, clRes] = await Promise.all([
+    const [pRes, cRes, clRes, lRes] = await Promise.all([
       fetch('/api/ai/providers'),
       fetch('/api/ai/config'),
       fetch('/api/ai/classifications'),
+      fetch('/api/ai/leads'),
     ]);
     aiProviders = await pRes.json();
     aiConfig = await cRes.json();
     classifications = await clRes.json();
+    leads = await lRes.json();
     document.getElementById('aiProvider').value = aiConfig.provider || 'gemini';
     document.getElementById('aiAutoClassify').checked = !!aiConfig.auto_classify;
     renderKeyDisplay();
@@ -1156,6 +1222,50 @@ async function classifyAll() {
   } catch { alert('Lỗi kết nối server'); }
   btn.disabled = false;
   btn.textContent = prev;
+}
+
+async function extractLeadsAll() {
+  if (!allPosts.length) return;
+  const btn = document.getElementById('btnLeads');
+  const st = document.getElementById('aiStatus');
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang tách lead...';
+  st.textContent = '⏳ Đang tách lead...';
+  st.style.color = '#65676b';
+  try {
+    const r = await fetch('/api/ai/extract-leads', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ posts: allPosts, force: true })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      Object.assign(leads, d.leads);
+      applyFilter();
+      const count = Object.values(d.leads || {}).reduce((sum, items) => sum + (items || []).length, 0);
+      if (d.warning) {
+        st.textContent = '⚠️ ' + d.warning;
+        st.style.color = '#b45309';
+      } else if (count) {
+        st.textContent = `✅ Tách được ${count} lead`;
+        st.style.color = '#16a34a';
+      } else {
+        st.textContent = 'ℹ️ Chưa phát hiện lead';
+        st.style.color = '#65676b';
+      }
+    } else {
+      st.textContent = '❌ ' + (d.error || 'Không xác định');
+      st.style.color = '#dc2626';
+      alert('Lỗi: ' + (d.error || 'Không xác định'));
+    }
+  } catch {
+    st.textContent = '❌ Lỗi kết nối server';
+    st.style.color = '#dc2626';
+    alert('Lỗi kết nối server');
+  }
+  btn.disabled = false;
+  btn.textContent = prev;
+  setTimeout(() => { st.textContent = ''; }, 7000);
 }
 
 function updateCatFilter() {
